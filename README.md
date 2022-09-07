@@ -22,7 +22,8 @@ Use the requirements.txt for your virtual environment: `pip3 install -r requirem
 ## How to use it
 First data must be imported into BloodHound (e.g using SharpHound or BloodHound.py) and Neo4j must be running.
 
-> :warning: **-ds and -dt values are case sensitive**
+> :warning: **-ds and -dt values are case sensitive**  
+
 Simple usage:
 ```ps1
 pathgen.py -dp neo4jPass -ds 'OWNED_USER@ATTACK.LOCAL' -dt 'TARGET_USER@ATTACK.LOCAL' && proxychains autobloody.py -d ATTACK -u 'owned_user' -p 'owned_user_pass' --host dc01.attack.local
