@@ -1,8 +1,10 @@
 from neo4j import GraphDatabase
+import logging
 
 class Database:
 
     def __init__(self, uri, user, password):
+        logging.getLogger("neo4j").setLevel(logging.WARNING)
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
         self._prepareDb()
 
