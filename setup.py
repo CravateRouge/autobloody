@@ -4,14 +4,14 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 setup(name='autobloody',
-      version='0.1.0',
+      version='0.1.1',
       description='AD Privesc Automation',
       long_description=long_description,
       long_description_content_type='text/markdown',
       author='CravateRouge',
       author_email='baptiste.crepin@ntymail.com',
       url='https://github.com/CravateRouge/autobloody',
-      download_url='https://github.com/CravateRouge/bloodyAD/archive/refs/tags/v0.1.0.tar.gz',
+      download_url='https://github.com/CravateRouge/bloodyAD/archive/refs/tags/v0.1.1.tar.gz',
       packages=['autobloody'],
       license='MIT',
       install_requires=['bloodyAD>=0.1','neo4j>=4.4.6'],

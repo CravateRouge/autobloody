@@ -1,3 +1,5 @@
 __pycache__/
 *.json
 venv/
+*.egg-info/
+dist/

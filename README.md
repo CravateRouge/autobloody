@@ -1,13 +1,13 @@
 # ![bloodyAD logo](https://repository-images.githubusercontent.com/415977068/9b2fed72-35fb-4faa-a8d3-b120cd3c396f) autobloody
-autobloody is a tool to automatically exploit Active Directory privilege escalation paths shown by BloodHound combining `pathgen` and `autobloody`.
+`autobloody` is a tool to automatically exploit Active Directory privilege escalation paths shown by BloodHound.
 
 ## Description
 This tool automates the AD privesc between two AD objects, the source (the one we own) and the target (the one we want) if a privesc path exists in BloodHound database.
-The automation is split in two parts in order to be used transparently with tunneling tools such as proxychains:
-- `pathgen` to find the optimal path for privesc using bloodhound data and neo4j queries.
-- `autobloody` to execute the path found with `pathgen`
+The automation is composed of two steps:
+- Finding the optimal path for privesc using bloodhound data and neo4j queries.
+- Execute the path found using `bloodyAD` package
 
-autobloody relies on [bloodyAD](https://github.com/CravateRouge/bloodyAD) and supports authentication using cleartext passwords, pass-the-hash, pass-the-ticket or certificates and binds to LDAP services of a domain controller to perform AD privesc.
+Because autobloody relies on [bloodyAD](https://github.com/CravateRouge/bloodyAD), it supports authentication using cleartext passwords, pass-the-hash, pass-the-ticket or certificates and binds to LDAP services of a domain controller to perform AD privesc.
 
 ## Installation
 A python package is available:
@@ -34,15 +34,15 @@ First data must be imported into BloodHound (e.g using SharpHound or BloodHound.
 
 Simple usage:
 ```ps1
-pathgen -dp neo4jPass -ds 'OWNED_USER@ATTACK.LOCAL' -dt 'TARGET_USER@ATTACK.LOCAL' && proxychains autobloody.py -d ATTACK -u 'owned_user' -p 'owned_user_pass' --host dc01.attack.local
+autobloody -u john.doe -p 'Password123!' --host 192.168.10.2 -dp 'neo4jP@ss' -ds 'JOHN.DOE@BLOODY.LOCAL' -dt 'BLOODY.LOCAL'
 ```
 
-Full help for `pathgen`:
+Full help:
 ```ps1
-[bloodyAD]$ pathgen -h
-usage: pathgen [-h] [--dburi DBURI] [-du DBUSER] -dp DBPASSWORD -ds DBSOURCE -dt DBTARGET [-f FILEPATH]
+[bloodyAD]$ ./autobloody.py -h
+usage: autobloody.py [-h] [--dburi DBURI] [-du DBUSER] -dp DBPASSWORD -ds DBSOURCE -dt DBTARGET [-d DOMAIN] [-u USERNAME] [-p PASSWORD] [-k] [-c CERTIFICATE] [-s] --host HOST
 
-Attack Path Generator
+AD Privesc Automation
 
 options:
   -h, --help            show this help message and exit
@@ -55,19 +55,6 @@ options:
                         Case sensitive label of the source node (name property in bloodhound)
   -dt DBTARGET, --dbtarget DBTARGET
                         Case sensitive label of the target node (name property in bloodhound)
-  -f FILEPATH, --filepath FILEPATH
-                        File path for the graph path file (default is "path.json")
-```
-
-Full help for `autobloody`:
-```ps1
-[bloodyAD]$ autobloody -h
-usage: autobloody [-h] [-d DOMAIN] [-u USERNAME] [-p PASSWORD] [-k] [-s] --host HOST [--path PATH]
-
-Attack Path Executor
-
-options:
-  -h, --help            show this help message and exit
   -d DOMAIN, --domain DOMAIN
                         Domain used for NTLM authentication
   -u USERNAME, --username USERNAME
@@ -79,14 +66,13 @@ options:
                         Certificate authentication, e.g: "path/to/key:path/to/cert"
   -s, --secure          Try to use LDAP over TLS aka LDAPS (default is LDAP)
   --host HOST           Hostname or IP of the DC (ex: my.dc.local or 172.16.1.3)
-  --path PATH           Filename of the attack path generated with pathgen.py (default is "path.json")
 ```
 
 ## How it works
-First `pathgen` generates a privesc path using the Dijkstra's algorithm implemented into the Neo4j's GDS library.
+First a privesc path is found using the Dijkstra's algorithm implemented into the Neo4j's GDS library.
 The Dijkstra's algorithm allows to solve the shortest path problem on a weighted graph. By default the edges created by BloodHound don't have weight but a type (e.g MemberOf, WriteOwner). A weight is then added to each edge accordingly to the type of edge and the type of node reached (e.g user,group,domain).
 
-Once a path is generated and stored as a json file, `autobloody` will connect to the DC and execute the path and clean what is reversible (everything except password change).
+Once a path is generated, `autobloody` will connect to the DC and execute the path and clean what is reversible (everything except `ForcePasswordChange` and `setOwner`).
 
 ## Limitations
 For now, only the following BloodHound edges are currently supported for automatic exploitation:

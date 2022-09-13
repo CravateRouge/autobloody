@@ -29,9 +29,14 @@ def main():
 
     path_dict = pathgen(args)
 
-    automate = automation.Automation(args)
-    automate.exploit(path_dict)
-    print("[+] Done, attack path executed")
+    automate = automation.Automation(args, path_dict)
+    automate.simulate()
+    execute_path = input("\n\nApply this privesc?(y/n)")
+    if execute_path == 'y':
+        automate.exploit()
+        print("\n[+] Done, attack path executed")
+    else:
+        print("\n[-] Attack path not executed")
 
 
 def pathgen(args):
