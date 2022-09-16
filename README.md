@@ -10,6 +10,21 @@ The automation is composed of two steps:
 Because autobloody relies on [bloodyAD](https://github.com/CravateRouge/bloodyAD), it supports authentication using cleartext passwords, pass-the-hash, pass-the-ticket or certificates and binds to LDAP services of a domain controller to perform AD privesc.
 
 ## Installation
+First if you run it on Linux, you must have `libkrb5-dev` installed on your OS in order for kerberos to work:
+```ps1
+# Debian/Ubuntu/Kali
+apt-get install libkrb5-dev
+
+# Centos/RHEL
+yum install krb5-devel
+
+# Fedora
+dnf install krb5-devel
+
+# Arch Linux
+pacman -S krb5
+```
+
 A python package is available:
 ```ps1
 pip install autobloody
@@ -26,6 +41,7 @@ pip install .
 - Neo4j with the [GDS library](https://neo4j.com/docs/graph-data-science/current/installation/)
 - BloodHound
 - Python 3
+- Gssapi (linux) or Winkerberos (Windows)
 
 ## How to use it
 First data must be imported into BloodHound (e.g using SharpHound or BloodHound.py) and Neo4j must be running.
