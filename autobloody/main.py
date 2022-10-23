@@ -20,6 +20,7 @@ def main():
     parser.add_argument('-c', '--certificate', help='Certificate authentication, e.g: "path/to/key:path/to/cert"')
     parser.add_argument('-s', '--secure', help='Try to use LDAP over TLS aka LDAPS (default is LDAP)', action='store_true', default=False)
     parser.add_argument('--host', help='Hostname or IP of the DC (ex: my.dc.local or 172.16.1.3)', required=True)
+    parser.add_argument('-y', '--yes', help='Assume yes to apply the generated privesc', action='store_true', default=False)
 
     if len(sys.argv)==1:
             parser.print_help(sys.stderr)
@@ -30,8 +31,13 @@ def main():
     path_dict = pathgen(args)
 
     automate = automation.Automation(args, path_dict)
-    automate.simulate()
-    execute_path = input("\n\nApply this privesc?(y/n)")
+    
+    if args.yes:
+        execute_path = 'y'
+    else:
+        automate.simulate()
+        execute_path = input("\n\nApply this privesc?(y/n)")
+
     if execute_path == 'y':
         automate.exploit()
         print("\n[+] Done, attack path executed")

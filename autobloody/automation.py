@@ -152,7 +152,7 @@ class Automation:
         else:
             user = rel['end_node']['distinguishedname']
             operation(self.conn, user, pwd)
-            user = utils.getObjAttr(self.conn, user, 'sAMAccountName')['attributes']['sAMAccountName']
+            user = utils.search(self.conn, user, attr='sAMAccountName')[0]['attributes']['sAMAccountName']
             LOG.debug(f'[+] switching to LDAP connection for user {user}')
         self._switchUser(user, pwd)
 
