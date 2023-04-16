@@ -35,7 +35,6 @@ class TestModules(unittest.TestCase):
         # db.createGraph(graph)
         # db.close()
 
-
     def test_SimpleRun(self):
         # TODO Add edges/nodes to neo4j database and delete them at the end of the run
         # TODO Add objects to AD and delete them at the end of the run
@@ -56,31 +55,27 @@ class TestModules(unittest.TestCase):
                 "BLOODY.LOCAL",
             ]
         )
-    
+
     def populateAD():
         graph = [
             {
                 "name": "AddSelf",
-                "snode": 
-                {
+                "snode": {
                     "label": "User",
-                    "prop": 
-                    {
+                    "prop": {
                         "name": "auto.selfuser",
                         "distinguishedname": "",
-                        "objectId": ""
-                    }
+                        "objectId": "",
+                    },
                 },
-                "enode": 
-                {
+                "enode": {
                     "label": "Group",
-                    "prop":
-                    {
-                    "name": "auto.selfgroup",
-                    "distinguishedname": "",
-                    "objectId": ""
-                    }
-                }
+                    "prop": {
+                        "name": "auto.selfgroup",
+                        "distinguishedname": "",
+                        "objectId": "",
+                    },
+                },
             }
         ]
 
@@ -135,22 +130,24 @@ class TestModules(unittest.TestCase):
         self.err = f"here is the error output ->\n\n {cmd}\n{err}"
         return self.err
 
-    
+
 from neo4j import GraphDatabase
+
+
 class Database:
     def __init__(self, neo4j_creds):
-        self.driver = GraphDatabase.driver(neo4j_creds["uri"], auth=(neo4j_creds["user"], neo4j_creds["password"]))
+        self.driver = GraphDatabase.driver(
+            neo4j_creds["uri"], auth=(neo4j_creds["user"], neo4j_creds["password"])
+        )
         self._prepareDb()
-
 
     def close(self):
         self.driver.close()
 
-
     def createGraph(self, graph):
         with self.driver.session() as session:
             session.write_transaction(self._createGraph, graph)
-    
+
     def destroyGraph(self, graph):
         with self.driver.session() as session:
             session.write_transaction(self._destroyGraph, graph)
@@ -158,13 +155,15 @@ class Database:
     @staticmethod
     def _createGraph(tx, graph):
         for rel in graph:
-            tx.run("CREATE (n:$slabel $sprop)",slabel=rel["snode"]["label"],elabel=rel["enode"]["label"])
-    
+            tx.run(
+                "CREATE (n:$slabel $sprop)",
+                slabel=rel["snode"]["label"],
+                elabel=rel["enode"]["label"],
+            )
+
     @staticmethod
     def _destroyGraph(tx, graph):
         pass
-
-
 
 
 if __name__ == "__main__":

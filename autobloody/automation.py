@@ -1,5 +1,6 @@
 import bloodyAD
-from bloodyAD import modules, utils
+from bloodyAD import utils
+from bloodyAD.cli_modules import add, set, remove
 
 LOG = utils.LOG
 
@@ -31,10 +32,10 @@ class Automation:
         self.simulation = True
         self.rel_str = {
             "setDCSync": "[Add DCSync right] to {}",
-            "delObjectFromGroup": "[Add member] {} to the group {}",
-            "setGenericAll": "[Add GenericAll right] to {} for {}",
-            "setOwner": "[Give ownership] to {} for {}",
-            "changePassword": "[Change password] of {} to {}",
+            "groupMember": "[Membership] on group {} for {}",
+            "genericAll": "[GenericAll given] on {} to {}",
+            "owner": "[Ownership Given] on {} to {}",
+            "password": "[Change password] of {} to {}",
         }
         print(f"\nAuthenticated as {self.co_args.username}:\n")
         self._unfold()
@@ -85,7 +86,7 @@ class Automation:
             )
 
     def _setDCSync(self, rel):
-        operation = modules.setDCSync
+        operation = add.setDCSync
         if self.simulation:
             user = rel["start_node"]["name"]
             self._printOperation(operation.__name__, [user])
@@ -98,17 +99,17 @@ class Automation:
         self._setDCSync(rel)
 
     def _addMember(self, rel):
-        operation = modules.delObjectFromGroup
+        add_operation = add.groupMember
         if self.simulation:
             member = rel["start_node"]["name"]
             group = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [member, group])
+            self._printOperation(operation.__name__, [group, member])
         else:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
-            modules.addForeignObjectToGroup(self.conn, member, group)
+            add_operation(self.conn, group, member)
             self.conn.close()
-        self.dirty_laundry.append({"f": operation, "args": [member, group]})
+        self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
 
     def _aclGroup(self, rel):
         self._genericAll(rel)
@@ -134,7 +135,7 @@ class Automation:
     # TODO: don't perform change password if it's explicitly refused by user
     def _forceChangePassword(self, rel):
         pwd = "Password123!"
-        operation = modules.changePassword
+        operation = set.password
         if self.simulation:
             user = rel["end_node"]["name"]
             self._printOperation(operation.__name__, [user, pwd])
@@ -148,27 +149,27 @@ class Automation:
         self._switchUser(user, pwd)
 
     def _genericAll(self, rel):
-        operation = modules.setGenericAll
+        add_operation = add.genericAll
         if self.simulation:
             user = rel["start_node"]["name"]
             target = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [user, target])
+            self._printOperation(add_operation.__name__, [target, user])
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            operation(self.conn, user, target)
-        self.dirty_laundry.append({"f": operation, "args": [user, target, "False"]})
+            add_operation(self.conn, target, user)
+        self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
 
     def _setOwner(self, rel):
-        operation = modules.setOwner
+        operation = set.owner
         if self.simulation:
             user = rel["start_node"]["name"]
             target = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [user, target])
+            self._printOperation(operation.__name__, [target, user])
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            operation(self.conn, user, target)
+            operation(self.conn, target, user)
 
     def _printOperation(self, operation_name, operation_args, revert=False):
         operation_str = "\t"
