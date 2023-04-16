@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="autobloody",
-    version="0.1.5",
+    version="0.1.6",
     description="AD Privesc Automation",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -14,7 +14,7 @@ setup(
     author_email="baptiste.crepin@ntymail.com",
     url="https://github.com/CravateRouge/autobloody",
     download_url=(
-        "https://github.com/CravateRouge/autobloody/archive/refs/tags/v0.1.5.tar.gz"
+        "https://github.com/CravateRouge/autobloody/archive/refs/tags/v0.1.6.tar.gz"
     ),
     packages=["autobloody"],
     license="MIT",

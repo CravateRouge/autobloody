@@ -1,4 +1,4 @@
-import unittest, subprocess, pathlib, json, hashlib, os, re
+import unittest, subprocess, pathlib, json, os
 
 
 class TestModules(unittest.TestCase):

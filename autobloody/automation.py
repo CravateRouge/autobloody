@@ -103,7 +103,7 @@ class Automation:
         if self.simulation:
             member = rel["start_node"]["name"]
             group = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [group, member])
+            self._printOperation(add_operation.__name__, [group, member])
         else:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
