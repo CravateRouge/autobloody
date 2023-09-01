@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autobloody"
+authors = [
+    { name="CravateRouge", email="baptiste.crepin@ntymail.com" },
+]
+version = "0.1.7"
+description = "AD Privesc Automation"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+]
+dependencies = [
+        "bloodyAD>=1.0.3",
+        "neo4j>=4.4.6",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/CravateRouge/autobloody"
+"Bug Tracker" = "https://github.com/CravateRouge/autobloody/issues"
+
+[project.scripts]
+autobloody = "autobloody.main:main"
