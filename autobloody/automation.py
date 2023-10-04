@@ -142,7 +142,9 @@ class Automation:
         else:
             user = rel["end_node"]["distinguishedname"]
             operation(self.conn, user, pwd)
-            user = next(get.search(self.conn, user, attr="sAMAccountName"))["sAMAccountName"]
+            user = next(get.search(self.conn, user, attr="sAMAccountName"))[
+                "sAMAccountName"
+            ]
             LOG.debug(f"[+] switching to LDAP connection for user {user}")
         self._switchUser(user, pwd)
 
