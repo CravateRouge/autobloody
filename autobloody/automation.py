@@ -1,6 +1,6 @@
 import bloodyAD
 from bloodyAD import utils
-from bloodyAD.cli_modules import add, set, remove
+from bloodyAD.cli_modules import add, set, remove, get
 
 LOG = utils.LOG
 
@@ -44,7 +44,7 @@ class Automation:
         self.simulation = False
         self.conn = bloodyAD.ConnectionHandler(self.co_args)
         self._unfold()
-        self.conn.close()
+        self.conn.rebind()
 
     def _unfold(self):
         for rel in self.path:
@@ -108,7 +108,7 @@ class Automation:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
             add_operation(self.conn, group, member)
-            self.conn.close()
+            self.conn.rebind()
         self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
 
     def _aclGroup(self, rel):
@@ -142,9 +142,7 @@ class Automation:
         else:
             user = rel["end_node"]["distinguishedname"]
             operation(self.conn, user, pwd)
-            user = utils.search(self.conn, user, attr="sAMAccountName")[0][
-                "attributes"
-            ]["sAMAccountName"]
+            user = next(get.search(self.conn, user, attr="sAMAccountName"))["sAMAccountName"]
             LOG.debug(f"[+] switching to LDAP connection for user {user}")
         self._switchUser(user, pwd)
 
