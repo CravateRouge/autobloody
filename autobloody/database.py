@@ -84,12 +84,16 @@ class Database:
     # CONS: Less efficient, more complex PROS: Doesn't need GDS plugin
     @staticmethod
     def _findShortestPath(tx, source, target):
-        result = tx.run(
-            "MATCH (s {name:$source}), (t {name:$target}) CALL"
-            " gds.shortestPath.dijkstra.stream('autobloody',{sourceNode:s,"
-            " targetNode:t, relationshipWeightProperty:'bloodycost'})YIELD path"
-            " RETURN path",
-            source=source,
-            target=target,
-        )
-        return result.single()[0].relationships
+        result = (
+            tx.run(
+                "MATCH (s {name:$source}), (t {name:$target}) CALL"
+                " gds.shortestPath.dijkstra.stream('autobloody',{sourceNode:s,"
+                " targetNode:t, relationshipWeightProperty:'bloodycost'})YIELD path"
+                " RETURN path",
+                source=source,
+                target=target,
+            )
+        ).single()
+        if not result:
+            raise ValueError("No path exploitable by autobloody found")
+        return result[0].relationships

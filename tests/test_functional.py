@@ -6,9 +6,9 @@ class TestModules(unittest.TestCase):
     def setUpClass(cls):
         conf = json.loads((pathlib.Path(__file__).parent / "secrets.json").read_text())
         cls.domain = conf["domain"]
-        cls.rootDomainNamingContext = ",".join(
-            ["DC=" + subdomain for subdomain in cls.domain.split(".")]
-        )
+        cls.rootDomainNamingContext = ",".join([
+            "DC=" + subdomain for subdomain in cls.domain.split(".")
+        ])
         cls.host = conf["pdc"]["ip"]
         cls.admin = {
             "username": conf["admin_user"]["username"],

@@ -113,9 +113,9 @@ def pathgen(args):
             "distinguishedname": rel.end_node["distinguishedname"],
             "objectid": rel.end_node["objectid"],
         }
-        path_dict.append(
-            {"start_node": start_node, "end_node": end_node, "cost": rel["cost"]}
-        )
+        path_dict.append({
+            "start_node": start_node, "end_node": end_node, "cost": rel["cost"]
+        })
 
     db.close()
     bypass.disable()
