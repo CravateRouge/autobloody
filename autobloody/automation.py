@@ -55,6 +55,9 @@ class Automation:
                 self.rel_types[typeID](rel)
             except Exception as e:
                 self._washer()
+                # Quick fix for issue #5 remove it when dropping Neo4j dependency
+                if typeID = 9999999999:
+                    raise ValueError("The path you're trying to exploit is not exploitable by autobloody only, you may need other tools to exploit it. See #Limitations in the README")
                 raise e
 
     def _washer(self):
