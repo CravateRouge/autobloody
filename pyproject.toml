@@ -7,7 +7,7 @@ name = "autobloody"
 authors = [
     { name="CravateRouge", email="baptiste.crepin@ntymail.com" },
 ]
-version = "0.2.0"
+version = "0.2.1"
 description = "AD Privesc Automation"
 readme = "README.md"
 requires-python = ">=3.8"
