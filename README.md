@@ -93,7 +93,7 @@ Once a path is generated, `autobloody` will connect to the DC and execute the pa
 ## Limitations
 For now, only the following BloodHound edges are currently supported for automatic exploitation:
 - MemberOf
-- ForceChangePassword (uses ShadowCredentials when possible, falls back to password change)
+- ForceChangePassword
 - AddMembers
 - AddSelf
 - DCSync

