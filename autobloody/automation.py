@@ -44,6 +44,28 @@ class Automation:
 
     async def exploit(self):
         self.simulation = False
+        # Add missing attributes for bloodyAD 2.x compatibility
+        if not hasattr(self.co_args, 'gc'):
+            self.co_args.gc = False
+        if not hasattr(self.co_args, 'dc_ip'):
+            self.co_args.dc_ip = ""
+        if not hasattr(self.co_args, 'format'):
+            self.co_args.format = ""
+        if not hasattr(self.co_args, 'dns'):
+            self.co_args.dns = ""
+        if not hasattr(self.co_args, 'timeout'):
+            self.co_args.timeout = 0
+        # Convert kerberos boolean to krb_args list format expected by bloodyAD 2.x
+        if hasattr(self.co_args, 'kerberos') and self.co_args.kerberos:
+            self.co_args.kerberos = []
+        else:
+            self.co_args.kerberos = None
+        # Convert secure boolean to integer format expected by bloodyAD 2.x
+        if hasattr(self.co_args, 'secure') and self.co_args.secure:
+            self.co_args.secure = 1
+        else:
+            self.co_args.secure = 0
+            
         self.conn = ConnectionHandler(self.co_args)
         await self._unfold()
         await self.conn.rebind()
@@ -138,9 +160,13 @@ class Automation:
 
     # Use shadow credentials when possible, fallback to password change
     async def _forceChangePassword(self, rel):
+        user = None
+        pwd = None
+        
         if self.simulation:
             user = rel["end_node"]["name"]
             self._printOperation("shadowCredentials", [user])
+            pwd = "Shadow_or_Password123!"
         else:
             user_dn = rel["end_node"]["distinguishedname"]
             
