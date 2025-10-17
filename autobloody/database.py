@@ -63,6 +63,8 @@ class Database:
             {"cost": 0, "edges": "GenericWrite|GenericAll|Contains", "endnode": "GPO"},
             {"cost": 250, "edges": "WriteDacl|Owns", "endnode": "GPO"},
             {"cost": 350, "edges": "WriteOwner", "endnode": "GPO"},
+            # ReadGMSAPassword edge for GMSA accounts
+            {"cost": 400000, "edges": "ReadGMSAPassword", "endnode": "User"},
         ]
         for bloodycost in bloodycosts:
             tx.run(

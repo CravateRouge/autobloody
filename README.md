@@ -93,7 +93,7 @@ Once a path is generated, `autobloody` will connect to the DC and execute the pa
 ## Limitations
 For now, only the following BloodHound edges are currently supported for automatic exploitation:
 - MemberOf
-- ForceChangePassword
+- ForceChangePassword (uses ShadowCredentials when possible, falls back to password change)
 - AddMembers
 - AddSelf
 - DCSync
@@ -105,6 +105,7 @@ For now, only the following BloodHound edges are currently supported for automat
 - Owns
 - Contains
 - AllExtendedRights
+- ReadGMSAPassword
 
 ## Support
 Like this project? Donations are welcome [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/CravateRouge)

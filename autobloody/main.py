@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, sys
+import argparse, sys, asyncio
 from autobloody import automation, database, proxy_bypass
 
 
@@ -79,24 +79,28 @@ def main():
 
     args = parser.parse_args()
 
-    path_dict = pathgen(args)
+    asyncio.run(run_autobloody(args))
+
+
+async def run_autobloody(args):
+    path_dict = await pathgen(args)
 
     automate = automation.Automation(args, path_dict)
 
     if args.yes:
         execute_path = "y"
     else:
-        automate.simulate()
+        await automate.simulate()
         execute_path = input("\n\nApply this privesc?(y/n)")
 
     if execute_path == "y":
-        automate.exploit()
+        await automate.exploit()
         print("\n[+] Done, attack path executed")
     else:
         print("\n[-] Attack path not executed")
 
 
-def pathgen(args):
+async def pathgen(args):
     bypass = proxy_bypass.ProxyBypass()
     db = database.Database(args.dburi, args.dbuser, args.dbpassword)
 
