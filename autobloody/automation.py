@@ -4,6 +4,10 @@ from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
 import asyncio
 
+# Constants
+SIMULATION_PASSWORD = "Shadow_or_Password123!"
+FALLBACK_PASSWORD = "Password123!"
+
 class Automation:
     def __init__(self, args, path):
         self.co_args = args
@@ -56,6 +60,7 @@ class Automation:
         if not hasattr(self.co_args, 'timeout'):
             self.co_args.timeout = 0
         # Convert kerberos boolean to krb_args list format expected by bloodyAD 2.x
+        # Empty list means kerberos is enabled, None means disabled
         if hasattr(self.co_args, 'kerberos') and self.co_args.kerberos:
             self.co_args.kerberos = []
         else:
@@ -160,13 +165,10 @@ class Automation:
 
     # Use shadow credentials when possible, fallback to password change
     async def _forceChangePassword(self, rel):
-        user = None
-        pwd = None
-        
         if self.simulation:
             user = rel["end_node"]["name"]
             self._printOperation("shadowCredentials", [user])
-            pwd = "Shadow_or_Password123!"
+            pwd = SIMULATION_PASSWORD
         else:
             user_dn = rel["end_node"]["distinguishedname"]
             
@@ -200,7 +202,7 @@ class Automation:
             except Exception as e:
                 LOG.warning(f"[!] ShadowCredentials failed: {str(e)}, falling back to password change")
                 # Fallback to password change
-                pwd = "Password123!"
+                pwd = FALLBACK_PASSWORD
                 await set.password(self.conn, user_dn, pwd)
                 user_entry = None
                 ldap = await self.conn.getLdap()
