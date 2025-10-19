@@ -88,7 +88,7 @@ class Database:
     def _findShortestPath(tx, source, target):
         result = (
             tx.run(
-                "MATCH (s {name:$source}), (t {name:$target}) CALL"
+                "MATCH (s {name:$source}) MATCH (t {name:$target}) CALL"
                 " gds.shortestPath.dijkstra.stream('autobloody',{sourceNode:s,"
                 " targetNode:t, relationshipWeightProperty:'bloodycost'})YIELD path"
                 " RETURN path",
