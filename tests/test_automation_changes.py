@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from autobloody.automation import Automation
 
 
-class TestAutomationChanges(unittest.TestCase):
+class TestAutomationChanges(unittest.IsolatedAsyncioTestCase):
     """Test cases for the new automation functions"""
     
     def setUp(self):
@@ -110,24 +110,6 @@ class TestAutomationChanges(unittest.TestCase):
         
         # Verify _genericAll was called
         self.automation._genericAll.assert_called_once_with(rel)
-
-
-def async_test(coro):
-    """Decorator to run async tests"""
-    def wrapper(*args, **kwargs):
-        import asyncio
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(coro(*args, **kwargs))
-    return wrapper
-
-
-# Apply async decorator to async test methods
-TestAutomationChanges.test_shadowCredentialsOrForceChange_simulation = async_test(
-    TestAutomationChanges.test_shadowCredentialsOrForceChange_simulation
-)
-TestAutomationChanges.test_aclOuGpo_simulation = async_test(
-    TestAutomationChanges.test_aclOuGpo_simulation
-)
 
 
 if __name__ == '__main__':
