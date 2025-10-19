@@ -1,6 +1,49 @@
 #!/usr/bin/env python3
-import argparse, sys
+import argparse, sys, asyncio, logging
 from autobloody import automation, database, proxy_bypass
+
+
+class PrefixedFormatter(logging.Formatter):
+    """Custom formatter that adds prefixes based on log level"""
+    
+    PREFIXES = {
+        logging.DEBUG: '[*]',
+        logging.INFO: '[+]',
+        logging.WARNING: '[!]',
+        logging.ERROR: '[-]',
+        logging.CRITICAL: '[-]',
+    }
+    
+    def format(self, record):
+        prefix = self.PREFIXES.get(record.levelno, '')
+        if prefix:
+            record.msg = f"{prefix} {record.msg}"
+        return super().format(record)
+
+
+def setup_logging(verbosity):
+    """Configure logging based on verbosity level"""
+    from bloodyAD.exceptions import LOG
+    
+    # Remove existing handlers
+    LOG.handlers.clear()
+    
+    # Set level based on verbosity
+    if verbosity >= 2:
+        level = logging.DEBUG
+    elif verbosity == 1:
+        level = logging.INFO
+    else:
+        level = logging.WARNING
+    
+    LOG.setLevel(level)
+    LOG.propagate = False
+    # Create console handler with custom formatter
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    formatter = PrefixedFormatter('%(message)s')
+    handler.setFormatter(formatter)
+    LOG.addHandler(handler)
 
 
 def main():
@@ -72,31 +115,45 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        help="Enable verbose output (-v for INFO, -vv for DEBUG)",
+        action="count",
+        default=0,
+    )
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
 
     args = parser.parse_args()
+    
+    # Setup logging based on verbosity
+    setup_logging(args.verbose)
 
-    path_dict = pathgen(args)
+    asyncio.run(run_autobloody(args))
+
+
+async def run_autobloody(args):
+    path_dict = await pathgen(args)
 
     automate = automation.Automation(args, path_dict)
 
     if args.yes:
         execute_path = "y"
     else:
-        automate.simulate()
+        await automate.simulate()
         execute_path = input("\n\nApply this privesc?(y/n)")
 
     if execute_path == "y":
-        automate.exploit()
+        await automate.exploit()
         print("\n[+] Done, attack path executed")
     else:
         print("\n[-] Attack path not executed")
 
 
-def pathgen(args):
+async def pathgen(args):
     bypass = proxy_bypass.ProxyBypass()
     db = database.Database(args.dburi, args.dbuser, args.dbpassword)
 
