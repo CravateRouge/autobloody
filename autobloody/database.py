@@ -44,29 +44,26 @@ class Database:
             {"cost": 3, "edges": "WriteOwner", "endnode": "Domain"},
             {
                 "cost": 100000,
-                "edges": "GenericWrite|GenericAll|ForceChangePassword|AllExtendedRights|Contains",
-                "endnode": "User",
+                "edges": "GenericWrite|GenericAll|AllExtendedRights|Contains",
+                "endnode": "User|Computer",
             },
-            {"cost": 100001, "edges": "WriteDacl|Owns", "endnode": "User"},
-            {"cost": 100002, "edges": "WriteOwner", "endnode": "User"},
+            {"cost": 100001, "edges": "WriteDacl|Owns", "endnode": "User|Computer"},
+            {"cost": 100002, "edges": "WriteOwner", "endnode": "User|Computer"},
             {
-                "cost": 100100,
-                "edges": "GenericWrite|GenericAll|ForceChangePassword|AllExtendedRights|Contains",
-                "endnode": "Computer",
-            },
-            {"cost": 100101, "edges": "WriteDacl|Owns", "endnode": "Computer"},
-            {"cost": 100102, "edges": "WriteOwner", "endnode": "Computer"},
+                "cost": 110000,
+                "edges": "ForceChangePassword",
+                "endnode": "User|Computer",
+            }
             # If we already have GenericAll right on OU we must ensure inheritance so we'll add a new GenericAll ACE with inheritance
-            {"cost": 0, "edges": "Contains|GenericWrite|GenericAll", "endnode": "OU"},
-            {"cost": 250, "edges": "WriteDacl|Owns", "endnode": "OU"},
-            {"cost": 350, "edges": "WriteOwner", "endnode": "OU"},
-            {"cost": 0, "edges": "GenericWrite|GenericAll|Contains", "endnode": "GPO"},
-            {"cost": 250, "edges": "WriteDacl|Owns", "endnode": "GPO"},
-            {"cost": 350, "edges": "WriteOwner", "endnode": "GPO"},
+            {"cost": 200, "edges": "Contains|GenericWrite|GenericAll", "endnode": "OU|GPO"},
+            {"cost": 250, "edges": "WriteDacl|Owns", "endnode": "OU|GPO"},
+            {"cost": 350, "edges": "WriteOwner", "endnode": "OU|GPO"},
+            {"cost": 10, "edges": "ReadGMSAPassword", "endnode": ""},
         ]
         for bloodycost in bloodycosts:
+            endnode = ":" + bloodycost['endnode'] if bloodycost['endnode'] else ""
             tx.run(
-                f"MATCH ()-[r:{bloodycost['edges']}]->(:{bloodycost['endnode']}) SET"
+                f"MATCH ()-[r:{bloodycost['edges']}]->({endnode}) SET"
                 f" r.bloodycost = {bloodycost['cost']}"
             )
 
