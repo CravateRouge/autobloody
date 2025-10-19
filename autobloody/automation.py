@@ -148,7 +148,14 @@ class Automation:
         else:
             member = rel["start_node"]["objectid"]
             group = rel["end_node"]["distinguishedname"]
-            await add_operation(self.conn, group, member)
+            try:
+                await add_operation(self.conn, group, member)
+            except Exception as e:
+                # Check if it's an entryAlreadyExists error
+                if "entryAlreadyExists" in str(e) or "LDAPModifyException" in str(type(e).__name__):
+                    LOG.warning(f"Entry already exists, continuing exploit: {e}")
+                else:
+                    raise
         self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
 
     async def _aclGroup(self, rel):
@@ -198,7 +205,14 @@ class Automation:
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            await add_operation(self.conn, target, user)
+            try:
+                await add_operation(self.conn, target, user)
+            except Exception as e:
+                # Check if it's an entryAlreadyExists error
+                if "entryAlreadyExists" in str(e) or "LDAPModifyException" in str(type(e).__name__):
+                    LOG.warning(f"Entry already exists, continuing exploit: {e}")
+                else:
+                    raise
         self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
 
     async def _setOwner(self, rel):
