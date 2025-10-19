@@ -164,13 +164,12 @@ class Automation:
     # ForceChangePassword edge directly changes the password
     async def _forceChangePassword(self, rel):
         pwd = PASSWORD_DEFAULT
-        operation = set.password
         if self.simulation:
             user = rel["end_node"]["name"]
-            self._printOperation(operation.__name__, [user, pwd])
+            self._printOperation("password", [user, pwd])
         else:
             user_dn = rel["end_node"]["distinguishedname"]
-            await operation(self.conn, user_dn, pwd)
+            await set.password(self.conn, user_dn, pwd)
             ldap = await self.conn.getLdap()
             user_entry = None
             async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
