@@ -10,7 +10,7 @@ class Database:
 
     def getPrivescPath(self, source, target):
         with self.driver.session() as session:
-            relationships = session.read_transaction(
+            relationships = session.execute_read(
                 self._findShortestPath, source, target
             )
         return relationships
@@ -20,8 +20,8 @@ class Database:
 
     def _prepareDb(self):
         with self.driver.session() as session:
-            session.write_transaction(self._setWeight)
-            session.write_transaction(self._createGraph)
+            session.execute_write(self._setWeight)
+            session.execute_write(self._createGraph)
 
     @staticmethod
     def _setWeight(tx):
@@ -83,7 +83,7 @@ class Database:
     def _findShortestPath(tx, source, target):
         result = (
             tx.run(
-                "MATCH (s {name:$source}), (t {name:$target}) CALL"
+                "MATCH (s {name:$source}) MATCH (t {name:$target}) CALL"
                 " gds.shortestPath.dijkstra.stream('autobloody',{sourceNode:s,"
                 " targetNode:t, relationshipWeightProperty:'bloodycost'})YIELD path"
                 " RETURN path",
