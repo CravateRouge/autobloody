@@ -37,7 +37,7 @@ def setup_logging(verbosity):
         level = logging.WARNING
     
     LOG.setLevel(level)
-    
+    LOG.propagate = False
     # Create console handler with custom formatter
     handler = logging.StreamHandler()
     handler.setLevel(level)

