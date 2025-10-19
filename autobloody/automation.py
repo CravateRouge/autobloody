@@ -174,7 +174,7 @@ class Automation:
                 user_entry = entry
                 break
             user = user_entry["sAMAccountName"]
-            LOG.debug(f"[+] switching to LDAP connection for user {user}")
+            LOG.debug(f"switching to LDAP connection for user {user}")
         await self._switchUser(user, pwd)
 
     async def _genericAll(self, rel):
@@ -217,7 +217,8 @@ class Automation:
                     break
             
             if password_blob:
-                LOG.debug(f"[+] Retrieved GMSA password (base64): {password_blob}")
+                LOG.info(f"Retrieved GMSA password (base64): {password_blob}")
+                print(f"[+] GMSA password retrieved (base64): {password_blob}")
                 
                 # Get the sAMAccountName for the GMSA account
                 ldap = await self.conn.getLdap()
@@ -229,13 +230,13 @@ class Automation:
                 if user_entry:
                     user = user_entry["sAMAccountName"]
                     # Use the base64 encoded password directly
-                    self.conn.conf.format = "b64"
-                    LOG.debug(f"[+] Switching to GMSA account: {user}")
-                    await self._switchUser(user, password_blob)
+                    pwd = password_blob
+                    LOG.info(f"Switching to GMSA account: {user}")
+                    await self._switchUser(user, pwd)
                 else:
-                    LOG.warning("[!] Could not retrieve sAMAccountName for GMSA account")
+                    LOG.warning("Could not retrieve sAMAccountName for GMSA account")
             else:
-                LOG.error("[-] Failed to retrieve GMSA password")
+                LOG.error("Failed to retrieve GMSA password")
 
 
     def _printOperation(self, operation_name, operation_args, revert=False):
