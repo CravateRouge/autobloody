@@ -138,6 +138,12 @@ def main():
 async def run_autobloody(args):
     path_dict = await pathgen(args)
 
+    # If domain and username are not provided, use values from first node in path_dict
+    if not args.domain and path_dict:
+        args.domain = path_dict[0]["start_node"].get("domain")
+    if not args.username and path_dict:
+        args.username = path_dict[0]["start_node"].get("samaccountname")
+
     automate = automation.Automation(args, path_dict)
 
     if args.yes:
