@@ -23,18 +23,18 @@ class Database:
             session.execute_write(self._setWeight)
             session.execute_write(self._createGraph)
 
+    # Cost is based on edge exploitation difficulty and impact
+    # If ldap doesn't need to be queried like with MemberOf, it has no cost
+    # If edge gives Domain Admin rights, it has the lowest cost
+    # If edge only requires reading ldap like ReadGMSAPassword, it has a low cost
+    # If edge requires writing ldap, the cost will be higher and depend of how much writing is needed (e.g.WriteOwner requires 3 writing)
+    # If edges requires manual steps after like GPO edges, cost is higher
+    # If edges requires potentially changing passwords, cost is higher because it can disrupt services
     @staticmethod
     def _setWeight(tx):
         # Existing edges on https://github.com/BloodHoundAD/BloodHound/blob/master/docs/data-analysis/edges.rst
         bloodycosts = [
             {"cost": 0, "edges": "MemberOf", "endnode": "Group"},
-            {
-                "cost": 100,
-                "edges": "AddSelf|AddMember|GenericAll|GenericWrite|AllExtendedRights|Contains",
-                "endnode": "Group",
-            },
-            {"cost": 200, "edges": "WriteDacl|Owns", "endnode": "Group"},
-            {"cost": 300, "edges": "WriteOwner", "endnode": "Group"},
             {
                 "cost": 1,
                 "edges": "DCSync|GenericAll|GetChangesAll|AllExtendedRights",
@@ -42,23 +42,40 @@ class Database:
             },
             {"cost": 2, "edges": "WriteDacl|Owns", "endnode": "Domain"},
             {"cost": 3, "edges": "WriteOwner", "endnode": "Domain"},
+            {"cost": 10, "edges": "ReadGMSAPassword", "endnode": ""},
+            {
+                "cost": 100,
+                "edges": "AddSelf|AddMember|GenericAll|GenericWrite|AllExtendedRights|Contains",
+                "endnode": "Group",
+            },
+            {"cost": 200, "edges": "WriteDacl|Owns", "endnode": "Group"},
+            {"cost": 300, "edges": "WriteOwner", "endnode": "Group"},
+            # If we already have GenericAll right on OU we must ensure inheritance or we'll add a new GenericAll ACE with inheritance
+            {"cost": 400, "edges": "Contains|GenericWrite|GenericAll", "endnode": "OU"},
+            {"cost": 500, "edges": "WriteDacl|Owns", "endnode": "OU"},
+            {"cost": 600, "edges": "WriteOwner", "endnode": "OU"},
+            {"cost": 10000, "edges": "Contains|GenericWrite|GenericAll", "endnode": "GPO"},
+            {"cost": 11000, "edges": "WriteDacl|Owns", "endnode": "GPO"},
+            {"cost": 12000, "edges": "WriteOwner", "endnode": "GPO"},
             {
                 "cost": 100000,
                 "edges": "GenericWrite|GenericAll|AllExtendedRights|Contains",
-                "endnode": "User|Computer",
+                "endnode": "User",
             },
-            {"cost": 100001, "edges": "WriteDacl|Owns", "endnode": "User|Computer"},
-            {"cost": 100002, "edges": "WriteOwner", "endnode": "User|Computer"},
+            {"cost": 100001, "edges": "WriteDacl|Owns", "endnode": "User"},
+            {"cost": 100002, "edges": "WriteOwner", "endnode": "User"},
+            {
+                "cost": 100000,
+                "edges": "GenericWrite|GenericAll|AllExtendedRights|Contains",
+                "endnode": "Computer",
+            },
+            {"cost": 100001, "edges": "WriteDacl|Owns", "endnode": "Computer"},
+            {"cost": 100002, "edges": "WriteOwner", "endnode": "Computer"},
             {
                 "cost": 110000,
                 "edges": "ForceChangePassword",
-                "endnode": "User|Computer",
-            }
-            # If we already have GenericAll right on OU we must ensure inheritance so we'll add a new GenericAll ACE with inheritance
-            {"cost": 200, "edges": "Contains|GenericWrite|GenericAll", "endnode": "OU|GPO"},
-            {"cost": 250, "edges": "WriteDacl|Owns", "endnode": "OU|GPO"},
-            {"cost": 350, "edges": "WriteOwner", "endnode": "OU|GPO"},
-            {"cost": 10, "edges": "ReadGMSAPassword", "endnode": ""},
+                "endnode": "",
+            },
         ]
         for bloodycost in bloodycosts:
             endnode = ":" + bloodycost['endnode'] if bloodycost['endnode'] else ""
