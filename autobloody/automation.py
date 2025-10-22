@@ -57,8 +57,7 @@ class Automation:
             self.co_args.format = ""
         if not hasattr(self.co_args, 'dns'):
             self.co_args.dns = ""
-        if not hasattr(self.co_args, 'timeout'):
-            self.co_args.timeout = 0
+        # timeout is now passed from argparse, no need to set default here
         # Convert kerberos boolean to krb_args list format expected by bloodyAD 2.x
         # Empty list means kerberos is enabled, None means disabled
         if hasattr(self.co_args, 'kerberos') and self.co_args.kerberos:

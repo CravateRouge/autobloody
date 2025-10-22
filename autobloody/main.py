@@ -122,6 +122,12 @@ def main():
         action="count",
         default=0,
     )
+    parser.add_argument(
+        "--timeout",
+        help="Connection timeout in seconds (default is 60)",
+        type=int,
+        default=60,
+    )
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
