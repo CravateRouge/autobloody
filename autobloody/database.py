@@ -128,31 +128,19 @@ class Database:
             return result[0].relationships
         else:
             # Use native CYPHER for shortest path (slower but doesn't require GDS)
-            # This implementation uses variable-length path matching with cost accumulation
+            # This implementation uses built-in shortestPath with cost accumulation
             result = tx.run(
                 """
-                MATCH (start {name: $source}), (end {name: $target})
-                CALL apoc.algo.dijkstra(start, end, '', 'bloodycost') YIELD path, weight
+                MATCH path = shortestPath((start {name: $source})-[*]->(end {name: $target}))
+                WITH path, relationships(path) as rels
+                WITH path, reduce(cost = 0, r in rels | cost + coalesce(r.bloodycost, 9999999999)) as totalCost
                 RETURN path
+                ORDER BY totalCost
+                LIMIT 1
                 """,
                 source=source,
                 target=target,
             ).single()
-            
-            if not result:
-                # Fallback to simple shortest path without weights if APOC is not available
-                result = tx.run(
-                    """
-                    MATCH path = shortestPath((start {name: $source})-[*]->(end {name: $target}))
-                    WITH path, relationships(path) as rels
-                    WITH path, reduce(cost = 0, r in rels | cost + coalesce(r.bloodycost, 9999999999)) as totalCost
-                    RETURN path
-                    ORDER BY totalCost
-                    LIMIT 1
-                    """,
-                    source=source,
-                    target=target,
-                ).single()
             
             if not result:
                 raise ValueError("No path exploitable by autobloody found")
