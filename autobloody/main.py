@@ -81,9 +81,9 @@ def main():
     )
 
     # Exploitation parameters
-    parser.add_argument("-d", "--domain", help="Domain used for NTLM authentication")
+    parser.add_argument("-d", "--domain", help="Domain used for NTLM authentication (Default is dbsource domain)")
     parser.add_argument(
-        "-u", "--username", help="Username used for NTLM authentication"
+        "-u", "--username", help="Username used for NTLM authentication (Default is dbsource sAMAccountName)"
     )
     parser.add_argument(
         "-p",
@@ -137,6 +137,11 @@ def main():
 
 async def run_autobloody(args):
     path_dict = await pathgen(args)
+
+    if not args.domain:
+        args.domain = path_dict[0]["start_node"]["domain"]
+    if not args.username:
+        args.username = path_dict[0]["start_node"]["samaccountname"]
 
     automate = automation.Automation(args, path_dict)
 

