@@ -2,6 +2,7 @@
 import argparse, sys, asyncio, logging
 from autobloody import automation, database, proxy_bypass
 
+LOG = logging.getLogger('autobloody')    
 
 class PrefixedFormatter(logging.Formatter):
     """Custom formatter that adds prefixes based on log level"""
@@ -23,11 +24,9 @@ class PrefixedFormatter(logging.Formatter):
 
 def setup_logging(verbosity):
     """Configure logging based on verbosity level"""
-    from bloodyAD.exceptions import LOG
-    
     # Remove existing handlers
     LOG.handlers.clear()
-    
+
     # Set level based on verbosity
     if verbosity >= 2:
         level = logging.DEBUG
@@ -137,7 +136,6 @@ def main():
     
     # Setup logging based on verbosity
     setup_logging(args.verbose)
-
     asyncio.run(run_autobloody(args))
 
 

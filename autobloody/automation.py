@@ -1,10 +1,10 @@
 from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
-from bloodyAD.exceptions import LOG
 from badldap.commons.exceptions import LDAPModifyException
 import logging, re, copy
 # Constant for password changes
 PASSWORD_DEFAULT = "AutoBl00dy123!"
+LOG = logging.getLogger('autobloody')
 
 class Automation:
     def __init__(self, args, path):

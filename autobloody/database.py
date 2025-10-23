@@ -1,6 +1,7 @@
 from neo4j import GraphDatabase
 import logging
 
+LOG = logging.getLogger('autobloody')
 
 class Database:
     def __init__(self, uri, user, password):
@@ -26,10 +27,10 @@ class Database:
                 # Try to call a GDS function
                 result = session.run("RETURN gds.version()").single()
                 self.gds_available = True
-                logging.info(f"GDS plugin detected (version {result[0]})")
+                LOG.info(f"GDS plugin detected (version {result[0]})")
             except Exception:
                 self.gds_available = False
-                logging.warning("GDS plugin not detected, will use native CYPHER queries (slower)")
+                LOG.warning("GDS plugin not detected, will use native CYPHER queries (slower)")
 
     def _prepareDb(self):
         with self.driver.session() as session:
@@ -108,8 +109,6 @@ class Database:
             " properties:{bloodycost:{defaultValue:9999999999}}}},{validateRelationships:true})"
         )
 
-    # Alternative with only CYPHER https://liberation-data.com/saxeburg-series/2018/11/28/rock-n-roll-traffic-routing.html
-    # CONS: Less efficient, more complex PROS: Doesn't need GDS plugin
     def _findShortestPath(self, tx, source, target):
         if self.gds_available:
             # Use GDS plugin for better performance
