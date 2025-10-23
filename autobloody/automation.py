@@ -1,10 +1,10 @@
 from bloodyAD import ConnectionHandler
 from bloodyAD.cli_modules import add, set, remove, get
-from bloodyAD.exceptions import LOG
 from badldap.commons.exceptions import LDAPModifyException
 import logging, re, copy
 # Constant for password changes
 PASSWORD_DEFAULT = "AutoBl00dy123!"
+LOG = logging.getLogger('autobloody')
 
 class Automation:
     def __init__(self, args, path):
@@ -57,8 +57,7 @@ class Automation:
             self.co_args.format = ""
         if not hasattr(self.co_args, 'dns'):
             self.co_args.dns = ""
-        if not hasattr(self.co_args, 'timeout'):
-            self.co_args.timeout = 0
+        # timeout is now passed from argparse, no need to set default here
         # Convert kerberos boolean to krb_args list format expected by bloodyAD 2.x
         # Empty list means kerberos is enabled, None means disabled
         if hasattr(self.co_args, 'kerberos') and self.co_args.kerberos:

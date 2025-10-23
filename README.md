@@ -10,21 +10,6 @@ The automation is composed of two steps:
 Because autobloody relies on [bloodyAD](https://github.com/CravateRouge/bloodyAD), it supports authentication using cleartext passwords, pass-the-hash, pass-the-ticket or certificates and binds to LDAP services of a domain controller to perform AD privesc.
 
 ## Installation
-First if you run it on Linux, you must have `libkrb5-dev` installed on your OS in order for kerberos to work:
-```ps1
-# Debian/Ubuntu/Kali
-apt-get install libkrb5-dev
-
-# Centos/RHEL
-yum install krb5-devel
-
-# Fedora
-dnf install krb5-devel
-
-# Arch Linux
-pacman -S krb5
-```
-
 A python package is available:
 ```ps1
 pip install autobloody
@@ -38,10 +23,12 @@ pip install .
 ### Dependencies
 - [bloodyAD](https://github.com/CravateRouge/bloodyAD)
 - Neo4j python driver
-- Neo4j with the [GDS library](https://neo4j.com/docs/graph-data-science/current/installation/)
-- BloodHound
+- Neo4j with BloodHound
 - Python 3
-- Gssapi (linux) or Winkerberos (Windows)
+
+For better performance, it's recommended to have the [GDS library](https://neo4j.com/docs/graph-data-science/current/installation/) installed in Neo4j. Without it, autobloody will use native CYPHER queries which are slower but still functional.
+
+A light bloodhound environment with GDS plugin can be installed by launching `./bloodhound-ce` from [https://github.com/CravateRouge/Single-User-BloodHound](https://github.com/CravateRouge/Single-User-BloodHound).
 
 ## How to use it
 First data must be imported into BloodHound (e.g using SharpHound or BloodHound.py) and Neo4j must be running.
@@ -50,13 +37,13 @@ First data must be imported into BloodHound (e.g using SharpHound or BloodHound.
 
 Simple usage:
 ```ps1
-autobloody -u john.doe -p 'Password123!' --host 192.168.10.2 -dp 'neo4jP@ss' -ds 'JOHN.DOE@BLOODY.LOCAL' -dt 'BLOODY.LOCAL'
+autobloody -p 'Password123!' --host 192.168.10.2 -dp 'neo4jP@ss' -ds 'JOHN.DOE@BLOODY.LOCAL' -dt 'BLOODY.LOCAL'
 ```
 
 Full help:
 ```ps1
 [bloodyAD]$ ./autobloody.py -h
-usage: autobloody.py [-h] [--dburi DBURI] [-du DBUSER] -dp DBPASSWORD -ds DBSOURCE -dt DBTARGET [-d DOMAIN] [-u USERNAME] [-p PASSWORD] [-k] [-c CERTIFICATE] [-s] --host HOST
+usage: autobloody.py [-h] [--dburi DBURI] [-du DBUSER] -dp DBPASSWORD -ds DBSOURCE -dt DBTARGET [-d DOMAIN] [-u USERNAME] [-p PASSWORD] [-k] [-c CERTIFICATE] [-s] --host HOST [-y] [-v] [--timeout TIMEOUT]
 
 AD Privesc Automation
 
@@ -72,9 +59,9 @@ options:
   -dt DBTARGET, --dbtarget DBTARGET
                         Case sensitive label of the target node (name property in bloodhound)
   -d DOMAIN, --domain DOMAIN
-                        Domain used for NTLM authentication
+                        Domain used for NTLM authentication (optional, default is dbsource domain)
   -u USERNAME, --username USERNAME
-                        Username used for NTLM authentication
+                        Username used for NTLM authentication (optional, default is dbsource sAMAccountName)
   -p PASSWORD, --password PASSWORD
                         Cleartext password or LMHASH:NTHASH for NTLM authentication
   -k, --kerberos
@@ -82,6 +69,9 @@ options:
                         Certificate authentication, e.g: "path/to/key:path/to/cert"
   -s, --secure          Try to use LDAP over TLS aka LDAPS (default is LDAP)
   --host HOST           Hostname or IP of the DC (ex: my.dc.local or 172.16.1.3)
+  -y, --yes             Assume yes to apply the generated privesc
+  -v, --verbose         Enable verbose output (-v for INFO, -vv for DEBUG)
+  --timeout TIMEOUT     Connection timeout in seconds (default is 60)
 ```
 
 ## How it works
