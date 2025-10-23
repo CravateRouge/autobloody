@@ -24,7 +24,6 @@ pip install .
 - [bloodyAD](https://github.com/CravateRouge/bloodyAD)
 - Neo4j python driver
 - Neo4j with BloodHound
-- BloodHound
 - Python 3
 
 For better performance, it's recommended to have the [GDS library](https://neo4j.com/docs/graph-data-science/current/installation/) installed in Neo4j. Without it, autobloody will use native CYPHER queries which are slower but still functional.
