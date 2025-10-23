@@ -186,7 +186,7 @@ async def pathgen(args):
             "domain": rel.end_node.get("domain"),
         }
         path_dict.append({
-            "start_node": start_node, "end_node": end_node, "cost": rel["cost"]
+            "start_node": start_node, "end_node": end_node, "cost": rel["bloodycost"]
         })
 
     db.close()
