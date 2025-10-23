@@ -130,11 +130,13 @@ class Database:
             # Use native CYPHER for shortest path (slower but doesn't require GDS)
             # This implementation uses built-in shortestPath with cost accumulation
             # Limited to 20 hops max to avoid performance issues
+            # Only consider relationships that have bloodycost set (exploitable edges)
             result = tx.run(
                 """
                 MATCH path = shortestPath((start {name: $source})-[*..20]->(end {name: $target}))
+                WHERE ALL(r IN relationships(path) WHERE r.bloodycost IS NOT NULL)
                 WITH path, relationships(path) as rels
-                WITH path, reduce(cost = 0, r in rels | cost + coalesce(r.bloodycost, 9999999999)) as totalCost
+                WITH path, reduce(cost = 0, r in rels | cost + r.bloodycost) as totalCost
                 RETURN path
                 ORDER BY totalCost
                 LIMIT 1
